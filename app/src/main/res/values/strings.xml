@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cam Depot</string>
+    <string name="app_desc">Public camera networks on the map: fire lookouts, state DOT and FAA weather cameras, filtered to the area you care about.</string>
+    <string name="loading_catalog">Loading catalog…</string>
+    <string name="search_hint">Search camera name</string>
+    <string name="online_only">Online only</string>
+    <string name="fire_only">Fire cameras only</string>
+    <string name="pick_point">From me</string>
+    <string name="go_to">Go to</string>
+    <string name="play_fov">Play FOV</string>
+    <string name="stop_fov">Stop FOV</string>
+    <string name="refresh_image">Refresh</string>
+    <string name="camera_image">Camera image</string>
+    <string name="all_providers">All providers</string>
+    <string name="all_counties">All counties</string>
+</resources>

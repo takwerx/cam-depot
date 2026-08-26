@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The filter controls. Added to the camera ListView with addHeaderView() rather
+     than sitting above it in the pane: a ListView cannot live inside a ScrollView,
+     and once these controls had section headings they were taller than a phone pane,
+     so the list was pushed off-screen with nothing able to scroll it. As a header
+     view the whole panel is a single scroller. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Where"
+        android:textSize="10sp"
+        android:textAllCaps="true"
+        android:paddingTop="6dp"
+        android:alpha="0.6" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+        style="@style/TakwerxButton"
+            android:id="@+id/state"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content" />
+
+        <Button
+        style="@style/TakwerxButton"
+            android:id="@+id/provider"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <Button
+        style="@style/TakwerxButton"
+        android:id="@+id/county"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Find a camera by name"
+        android:textSize="10sp"
+        android:textAllCaps="true"
+        android:paddingTop="6dp"
+        android:alpha="0.6" />
+
+    <EditText
+        android:id="@+id/search"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/search_hint"
+        android:inputType="text"
+        android:maxLines="1"
+        android:textSize="14sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Show"
+        android:textSize="10sp"
+        android:textAllCaps="true"
+        android:paddingTop="6dp"
+        android:alpha="0.6" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <CheckBox
+            android:id="@+id/live_only"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Video" />
+
+        <CheckBox
+            android:id="@+id/still_only"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Still" />
+
+        <CheckBox
+            android:id="@+id/fire_only"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Fire" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Distance from a point"
+        android:textSize="10sp"
+        android:textAllCaps="true"
+        android:paddingTop="6dp"
+        android:alpha="0.6" />
+
+    <TextView
+        android:id="@+id/radius_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <SeekBar
+            android:id="@+id/radius"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:max="200" />
+
+        <Button
+        style="@style/TakwerxButton"
+            android:id="@+id/pick_point"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/pick_point" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Draw on the map"
+        android:textSize="10sp"
+        android:textAllCaps="true"
+        android:paddingTop="6dp"
+        android:alpha="0.6" />
+
+    <TextView
+        android:id="@+id/zoom_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+        style="@style/TakwerxButton"
+            android:id="@+id/zoom_set"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Use this zoom" />
+
+        <Button
+        style="@style/TakwerxButton"
+            android:id="@+id/zoom_preset"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Presets" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Cameras"
+        android:textSize="10sp"
+        android:textAllCaps="true"
+        android:paddingTop="8dp"
+        android:alpha="0.6" />
+
+</LinearLayout>
