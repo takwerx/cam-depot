@@ -61,6 +61,31 @@ public final class CameraLayer {
     private static final int LINE_COLOR = 0xFFFF7700;
 
     /**
+     * A stills camera shows a short wedge instead of a long line, copying ATAK's own
+     * Quick Pic.
+     *
+     * <p>{@code ImageContainer.populateLocation} does exactly this when a photo with a
+     * {@code GPSImgDirection} is opened:
+     *
+     * <pre>
+     *   float hfov = ExifHelper.getExtraFloat(tiff, "HorizontalFOV", 20.0f);
+     *   sensorFOV.setMetrics(direction, hfov, 1000.0f);
+     * </pre>
+     *
+     * <p>The distinction that matters: a streaming camera's line answers <em>how far
+     * can it see</em>, so it runs to the horizon. This answers only <em>which way is
+     * it looking</em>, for a fixed oblique camera whose icon cannot point. A short
+     * wedge says that and then stops making claims — the range is deliberately not a
+     * statement about coverage.
+     *
+     * <p>It does not reintroduce the wedge-soup the bearing line was designed to
+     * avoid. That was 1,600 wedges drawn at once across every fire camera; this is one,
+     * only while its picture is open.
+     */
+    private static final double STILL_FOV_DEGREES = 20;
+    private static final double STILL_FOV_RANGE_M = 1000;
+
+    /**
      * Resolution to fly to on "Go to", in metres per pixel — close enough to see the
      * camera and its surroundings without being on top of it.
      */
@@ -95,10 +120,8 @@ public final class CameraLayer {
     private final MapView mapView;
     private final android.content.Context pluginContext;
     private final MapGroup group;
-    /** Built once: the same directional icon is shared by every marker. */
-    private Icon dirIcon;
-    /** Artwork for cameras with no bearing: already facing east, never rotated. */
-    private Icon eastIcon;
+    /** ATAK's own Quick Pic marker icon, for cameras that serve a still only. */
+    private Icon stillIcon;
 
     private final Map<String, Marker> markers = new HashMap<>();
     /**
@@ -132,6 +155,51 @@ public final class CameraLayer {
      * zooming to where they want cameras to start and pressing "Use this zoom",
      * which avoids them having to reason about scale at all.
      */
+    /** Told when a stills camera is tapped on the map, so its picture can open. */
+    public interface OnStillTapped {
+        void onStillTapped(Camera c);
+    }
+
+    private OnStillTapped stillTapped;
+
+    public void setOnStillTapped(OnStillTapped l) {
+        this.stillTapped = l;
+    }
+
+    /**
+     * Tapping a stills camera on the map opens its picture.
+     *
+     * <p>A camera that streams has the radial's video button and needs nothing extra.
+     * A stills camera had no way in from the map at all: its radial is the sensor one,
+     * whose video button is correctly greyed out, and ATAK offers no "show me the
+     * picture" action for a marker.
+     *
+     * <p>It is not an attachment and deliberately so. An attachment is a stored
+     * artifact belonging to the marker; a camera still is a live view where the only
+     * frame worth having is the current one. This reaches out and fetches on each open,
+     * the same as the panel does, and leaves nothing on disk.
+     *
+     * <p>The listener does not consume the event, so ATAK's radial still opens
+     * alongside — nothing that worked before stops working.
+     */
+    private final com.atakmap.android.maps.MapEventDispatcher.MapEventDispatchListener
+            itemClick = new com.atakmap.android.maps.MapEventDispatcher
+                    .MapEventDispatchListener() {
+        @Override
+        public void onMapEvent(com.atakmap.android.maps.MapEvent event) {
+            if (event == null || stillTapped == null)
+                return;
+            final MapItem it = event.getItem();
+            if (it == null || it.getUID() == null
+                    || !it.getUID().startsWith(UID_PREFIX))
+                return;
+            final Camera c = shown.get(
+                    it.getUID().substring(UID_PREFIX.length()));
+            if (c != null && !c.hasStream())
+                stillTapped.onStillTapped(c);
+        }
+    };
+
     private double maxResolution = 500;
     private double rangeMetres = DEFAULT_RANGE_M;
     private boolean gateEnabled = true;
@@ -172,6 +240,8 @@ public final class CameraLayer {
             g = mapView.getRootGroup().addGroup(GROUP);
         this.group = g;
         mapView.addOnMapMovedListener(moved);
+        mapView.getMapEventDispatcher().addMapEventListener(
+                com.atakmap.android.maps.MapEvent.ITEM_CLICK, itemClick);
     }
 
     public void dispose() {
@@ -179,6 +249,8 @@ public final class CameraLayer {
         main.removeCallbacks(addTick);
         main.removeCallbacks(removeTick);
         mapView.removeOnMapMovedListener(moved);
+        mapView.getMapEventDispatcher().removeMapEventListener(
+                com.atakmap.android.maps.MapEvent.ITEM_CLICK, itemClick);
         clear();
         mapView.getRootGroup().removeGroup(group);
     }
@@ -711,13 +783,19 @@ public final class CameraLayer {
     private void styleFov(Marker m, Camera c, boolean visible) {
         if (c == null || !c.hasFov())
             return;
+        final boolean still = !c.hasStream();
         try {
             final com.atakmap.android.maps.SensorFOV f =
                     SensorDetailHandler.addFovToMap(m,
                             c.pan,
-                            0,                              // no wedge: a bearing line
-                            Math.min(rangeMetres, SensorDetailHandler.MAX_SENSOR_RANGE),
-                            new float[] { 1f, 1f, 1f, 0f }, // alpha 0, per the CoT
+                            still ? STILL_FOV_DEGREES : 0,  // wedge, or a bearing line
+                            still ? STILL_FOV_RANGE_M
+                                  : Math.min(rangeMetres,
+                                          SensorDetailHandler.MAX_SENSOR_RANGE),
+                            // Line: alpha 0, no fill, per the operator's CoT.
+                            // Wedge: translucent white, like Quick Pic's.
+                            still ? new float[] { 1f, 1f, 1f, 0.25f }
+                                  : new float[] { 1f, 1f, 1f, 0f },
                             // The sixth argument is VISIBLE, not labels.
                             //
                             // It was read as "labels" and hard-coded false, so every
@@ -725,13 +803,23 @@ public final class CameraLayer {
                             // addFovToMap's own setVisible(false). The line was built
                             // correctly and then switched off by the call that built
                             // it, which is why a correct azimuth drew nothing.
-                            visible);
+                            // ...and it is gated on the zoom threshold, not just on
+                            // whether the bearing is switched on.
+                            //
+                            // addFovToMap ends in setVisible(), unconditionally, and
+                            // update() calls this on every pass for a camera whose
+                            // bearing is on. applyZoomGate() runs afterwards but only
+                            // dispatches when visibility actually CHANGES, so once the
+                            // marker was already hidden the gate was a no-op and each
+                            // pan put the line back -- bearings floating over a map
+                            // with no markers on it.
+                            visible && isWithinZoom());
             if (f == null) {
                 Log.w(TAG, "ATAK declined to create a SensorFOV for " + c.id);
                 return;
             }
-            f.setStrokeWeight(5.0);
-            f.setStrokeColor(LINE_COLOR);
+            f.setStrokeWeight(still ? 2.0 : 5.0);
+            f.setStrokeColor(still ? 0xFFFFFFFF : LINE_COLOR);
             f.setRangeLineStrokeWeight(1.0);
             f.setRangeLineStrokeColor(0xFF000000);
         } catch (LinkageError | RuntimeException e) {
@@ -751,26 +839,45 @@ public final class CameraLayer {
      * <p>So the marker gets an asymmetric icon that points, drawn facing north, and
      * ATAK's rotation does the rest.
      */
+    /**
+     * Mark a stills-only camera with ATAK's own Quick Pic icon, and leave every other
+     * camera exactly as ATAK draws it.
+     *
+     * <p>ATAK derives a marker's icon from its CoT type unless
+     * {@code adapt_marker_icon} says otherwise, so a {@code b-m-p-s-p-loc} marker gets
+     * {@code assets/icons/sensor_location.png} -- a camcorder. For a camera that
+     * streams that is exactly right, and it is left alone.
+     *
+     * <p>A camera that only serves a still gets {@code b-i-x-i.png} instead: the
+     * marker Quick Pic drops when it saves a photo, which in ATAK's own language means
+     * "there is a picture here". Referenced through {@code asset:/}, which
+     * {@code AssetProtocolHandler} resolves out of ATAK at runtime -- so it is the
+     * real icon at the right size, not a copy, and nothing from the SDK enters this
+     * repository.
+     *
+     * <p>Two earlier attempts at this were wrong and are worth not repeating. Custom
+     * 96x96 artwork rendered at three times the size of every other marker on the map,
+     * because ATAK's own marker icons are 32x32. And clearing
+     * {@code adapt_marker_icon} for <em>all</em> cameras replaced the camcorder
+     * everywhere with plain arrows, which is a downgrade: the camcorder already says
+     * "video" perfectly well.
+     */
     private void setDirectionalIcon(Marker m, Camera c) {
+        // Streaming camera: ATAK's camcorder is right. Do not touch it.
+        if (c.hasStream())
+            return;
         try {
-            // Two pieces of artwork, so rotation is only ever used where a real
-            // bearing justifies it:
-            //
-            //   ic_cam_dir   drawn facing north, rotated to the camera's bearing
-            //   ic_cam_east  drawn facing east, never rotated
-            //
-            // The second exists because chasing the sign convention for a fixed
-            // direction was a guessing game -- track 0 rendered north, track 90
-            // rendered south, which no single linear rotation explains. Drawing the
-            // convention into the artwork and leaving the track alone removes the
-            // question rather than answering it.
-            if (dirIcon == null)
-                dirIcon = icon(com.atakmap.android.camdepot.plugin.R.drawable.ic_cam_dir);
-            if (eastIcon == null)
-                eastIcon = icon(com.atakmap.android.camdepot.plugin.R.drawable.ic_cam_east);
-            m.setIcon(c.hasFov() ? dirIcon : eastIcon);
+            if (stillIcon == null) {
+                stillIcon = new Icon.Builder()
+                        .setImageUri(Icon.STATE_DEFAULT, "asset:/icons/b-i-x-i.png")
+                        .setAnchor(Icon.ANCHOR_CENTER, Icon.ANCHOR_CENTER)
+                        .setColor(Icon.STATE_DEFAULT, 0xFFFFFFFF)
+                        .build();
+            }
+            m.setMetaBoolean("adapt_marker_icon", false);
+            m.setIcon(stillIcon);
         } catch (LinkageError | RuntimeException e) {
-            Log.w(TAG, "could not set the directional icon for " + c.id, e);
+            Log.w(TAG, "could not set the stills icon for " + c.id, e);
         }
     }
 
@@ -805,7 +912,10 @@ public final class CameraLayer {
         // DOT cameras the same way at once.
         // No bearing: leave the track alone entirely. The east-facing artwork already
         // points where it should, and any rotation would move it off that.
-        if (!c.hasFov())
+        //
+        // Stills cameras are left alone for the same reason: they wear a camera body,
+        // which has no nose to aim. Rotating one just tips it over.
+        if (!c.hasFov() || !c.hasStream())
             return;
         try {
             m.setTrack((c.pan + ICON_HEADING_OFFSET + 360) % 360, 0);

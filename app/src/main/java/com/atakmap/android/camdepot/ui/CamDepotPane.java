@@ -195,7 +195,40 @@ public final class CamDepotPane implements CameraStore.Listener {
 
     // ---- wiring -----------------------------------------------------------
 
+    /**
+     * Somewhere to put the camera detail so the map stays usable behind it.
+     *
+     * <p>The detail used to be an AlertDialog, which blocks the map: you could look at
+     * the picture or move the map, not both. ATAK's own KML feature details open in a
+     * side pane for exactly this reason — the operator wants to scroll around with the
+     * image still up. The plugin supplies the host because {@code PaneBuilder} and the
+     * UI service live there.
+     */
+    public interface DetailHost {
+        void showDetailPane(android.view.View v);
+        void hideDetailPane();
+    }
+
+    private DetailHost detailHost;
+
+    public void setDetailHost(DetailHost h) {
+        this.detailHost = h;
+    }
+
     private void wire() {
+        // Tapping a stills camera on the map opens the same picture the panel shows.
+        layer.setOnStillTapped(new CameraLayer.OnStillTapped() {
+            @Override
+            public void onStillTapped(final Camera c) {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        showDetail(c);
+                    }
+                });
+            }
+        });
+
         final TextWatcher tw = new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int a, int b, int c) {
@@ -259,7 +292,15 @@ public final class CamDepotPane implements CameraStore.Listener {
                 choose("Provider", providerNames, selectedProvider, new Chosen() {
                     @Override
                     public void onChosen(String value) {
-                        selectedProvider = ALL.equals(value) ? null : value;
+                        // Strip the count back off before it becomes a filter.
+                        //
+                        // The list shows "CALTRANS (2917)" so a filter states what it
+                        // will cost before it is used, but the camera's provider is
+                        // just "CALTRANS". Storing the label made every provider
+                        // filter match nothing, and the map went empty until the next
+                        // refresh quietly reset it -- self-healing, and so easy to
+                        // miss that it survived until an operator sat and watched it.
+                        selectedProvider = ALL.equals(value) ? null : stripCount(value);
                         providerButton.setText(value);
                         apply();
                     }
@@ -684,6 +725,14 @@ public final class CamDepotPane implements CameraStore.Listener {
         status.setText(msg.toString());
     }
 
+    /** "CALTRANS (2917)" -> "CALTRANS". Labels carry counts; filters must not. */
+    private static String stripCount(String label) {
+        if (label == null)
+            return null;
+        final int i = label.lastIndexOf(" (");
+        return i > 0 && label.endsWith(")") ? label.substring(0, i) : label;
+    }
+
     static final String ALL = "All providers";
     static final String ALL_COUNTIES = "All counties";
 
@@ -743,6 +792,24 @@ public final class CamDepotPane implements CameraStore.Listener {
         final TextView rangeLabel = v.findViewById(R.id.range_label);
 
         info.setText(describe(c));
+
+        // A stills camera shows its bearing for as long as its picture is open.
+        //
+        // Cameras that stream wear a directional arrow and carry their aim in the
+        // icon. A stills camera cannot: it is an oblique fixed camera wearing a
+        // camera body, and a camera body has no nose to point. So the direction is
+        // answered the moment the operator actually wants it -- while they are
+        // looking at the picture and asking "what am I looking at?" -- and then gets
+        // out of the way again. 1,595 Caltrans cameras would otherwise be permanent
+        // lines across the map, which is the soup the whole fov=0 design avoids.
+        //
+        // Only what this opened is closed again: a bearing the operator had already
+        // switched on, here or from ATAK's radial, is left exactly as they left it.
+        final boolean autoFov = !c.hasStream() && c.hasFov()
+                && !layer.isFovShowing(c.id);
+        if (autoFov)
+            layer.showFov(c);
+
         play.setText(layer.isFovShowing(c.id) ? "Hide bearing" : "Show bearing");
         if (!c.hasFov()) {
             play.setEnabled(false);
@@ -812,6 +879,46 @@ public final class CamDepotPane implements CameraStore.Listener {
             }
         });
 
+        if (detailHost != null) {
+            v.findViewById(R.id.goto_cam).setVisibility(View.VISIBLE);
+            v.findViewById(R.id.close_pane).setVisibility(View.VISIBLE);
+
+            // A stills camera's pane is the picture and nothing else.
+            //
+            // The bearing-line controls belong to cameras that stream, where the line
+            // answers "how far can it see" and is worth tuning. On a stills camera the
+            // operator opened the pane to look at a photograph; a range slider reading
+            // "38.00 mi", a bearing toggle and a dead video button are all answering
+            // questions nobody asked. The bearing still shows on the MAP while the
+            // picture is open -- that part they wanted -- it just is not driven from
+            // here.
+            if (!c.hasStream()) {
+                rangeLabel.setVisibility(View.GONE);
+                range.setVisibility(View.GONE);
+                play.setVisibility(View.GONE);
+                v.findViewById(R.id.video).setVisibility(View.GONE);
+            }
+            v.findViewById(R.id.goto_cam).setOnClickListener(
+                    new View.OnClickListener() {
+                        @Override
+                        public void onClick(View b) {
+                            layer.goTo(c);
+                        }
+                    });
+            v.findViewById(R.id.close_pane).setOnClickListener(
+                    new View.OnClickListener() {
+                        @Override
+                        public void onClick(View b) {
+                            if (autoFov)
+                                layer.hideFov(c.id);
+                            detailHost.hideDetailPane();
+                        }
+                    });
+            detailHost.showDetailPane(v);
+            load.run();
+            return;
+        }
+
         new AlertDialog.Builder(ui)
                 .setTitle(c.label())
                 .setView(v)
@@ -822,6 +929,14 @@ public final class CamDepotPane implements CameraStore.Listener {
                     }
                 })
                 .setNegativeButton("Close", null)
+                .setOnDismissListener(
+                        new android.content.DialogInterface.OnDismissListener() {
+                            @Override
+                            public void onDismiss(android.content.DialogInterface d) {
+                                if (autoFov)
+                                    layer.hideFov(c.id);
+                            }
+                        })
                 .show();
 
         load.run();
@@ -907,21 +1022,83 @@ public final class CamDepotPane implements CameraStore.Listener {
                     if (u == null)
                         info.append("\n(no image available)");
                     else
-                        fetchInto(u, into);
+                        fetchInto(u, into, c.id);
                 }
             });
             return;
         }
-        fetchInto(url, into);
+        fetchInto(url, into, c.id);
     }
 
+    /**
+     * Decoder thread. JPEG decode is not main-thread work.
+     *
+     * <p>{@link Http} delivers on the main thread so callers can touch views, which is
+     * right for the bytes and wrong for what came in them: these frames are 1920x1080,
+     * and decoding one on the UI thread is a visible stall every time a camera opens.
+     * Same mistake as the marker churn that ANR'd ATAK, in a smaller place.
+     */
+    private static final java.util.concurrent.ExecutorService DECODER =
+            java.util.concurrent.Executors.newSingleThreadExecutor(
+                    new java.util.concurrent.ThreadFactory() {
+                        @Override
+                        public Thread newThread(Runnable r) {
+                            final Thread t = new Thread(r, "camdepot-decode");
+                            t.setDaemon(true);
+                            return t;
+                        }
+                    });
+
+    /**
+     * The last frame seen per camera, so reopening one paints immediately.
+     *
+     * <p>Small on purpose. It exists to cover the switch back and forth between two or
+     * three cameras, not to be an image store — and a stale frame is only ever shown
+     * while a fresh one is already on its way.
+     */
+    private final android.util.LruCache<String, Bitmap> frames =
+            new android.util.LruCache<>(6);
+
     private void fetchInto(String url, final ImageView into) {
+        fetchInto(url, into, null);
+    }
+
+    /**
+     * @param key camera id; the view is tagged with it so a slow response cannot
+     *            land in a pane the operator has already moved on from
+     */
+    private void fetchInto(String url, final ImageView into, final String key) {
+        if (key != null) {
+            into.setTag(key);
+            final Bitmap had = frames.get(key);
+            if (had != null)
+                into.setImageBitmap(had);   // something to look at while we fetch
+        }
         Http.get(url, new Http.Callback() {
             @Override
-            public void onSuccess(byte[] body) {
-                final Bitmap bm = BitmapFactory.decodeByteArray(body, 0, body.length);
-                if (bm != null)
-                    into.setImageBitmap(bm);
+            public void onSuccess(final byte[] body) {
+                DECODER.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        // Half size is still larger than the view and decodes in a
+                        // quarter of the pixels.
+                        final BitmapFactory.Options o = new BitmapFactory.Options();
+                        o.inSampleSize = 2;
+                        final Bitmap bm = BitmapFactory.decodeByteArray(
+                                body, 0, body.length, o);
+                        if (bm == null)
+                            return;
+                        if (key != null)
+                            frames.put(key, bm);
+                        handler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (key == null || key.equals(into.getTag()))
+                                    into.setImageBitmap(bm);
+                            }
+                        });
+                    }
+                });
             }
 
             @Override

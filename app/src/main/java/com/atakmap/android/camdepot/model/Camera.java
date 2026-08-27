@@ -34,6 +34,16 @@ public final class Camera {
      * so this is what separates a camera that can stream from one that cannot.
      */
     public final String stream;
+    /**
+     * The agency's own current-frame URL, where the agency publishes one.
+     *
+     * <p>Caltrans serves a stable per-camera JPEG and refreshes it every 15 s. Going
+     * direct replaces a second-hand copy on ALERT West's CDN that had to be located
+     * by filename and date path, and which reached operators hours stale or showing
+     * "down for construction". Empty for cameras with no such URL, which fall back to
+     * the CDN path.
+     */
+    public final String still;
 
     // ---- dynamic: rewritten on every refresh ------------------------------
     /** Pan in degrees, true north. NaN when the camera does not report one. */
@@ -48,7 +58,7 @@ public final class Camera {
 
     public Camera(String id, String name, String host, double lat, double lon,
             String county, String state, String provider, String sponsor,
-            boolean ptz, boolean fire, String stream) {
+            boolean ptz, boolean fire, String stream, String still) {
         this.id = id;
         this.name = name;
         this.host = host;
@@ -61,6 +71,7 @@ public final class Camera {
         this.ptz = ptz;
         this.fire = fire;
         this.stream = stream == null ? "" : stream;
+        this.still = still == null ? "" : still;
     }
 
     /** Human label: "Keller Peak 1" rather than "Keller_Peak_1". */

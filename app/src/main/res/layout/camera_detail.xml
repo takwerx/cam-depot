@@ -55,6 +55,25 @@
             android:layout_height="wrap_content"
             android:text="@string/refresh_image" />
 
+        <!-- Shown only when hosted in a side pane; the dialog supplies its own. -->
+        <Button
+            style="@style/TakwerxButton"
+            android:id="@+id/goto_cam"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:text="Go to" />
+
+        <Button
+            style="@style/TakwerxButton"
+            android:id="@+id/close_pane"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:text="Close" />
+
         <Button
         style="@style/TakwerxButton"
             android:id="@+id/video"
@@ -63,4 +82,5 @@
             android:layout_height="wrap_content"
             android:text="Video" />
     </LinearLayout>
+
 </LinearLayout>

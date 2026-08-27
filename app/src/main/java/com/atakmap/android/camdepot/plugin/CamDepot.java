@@ -39,6 +39,8 @@ public class CamDepot implements IPlugin {
     IHostUIService uiService;
     ToolbarItem toolbarItem;
     Pane pane;
+    /** Second pane holding a single camera's picture, so the map stays live. */
+    Pane detailPane;
     CamDepotPane content;
 
     public CamDepot(IServiceController serviceController) {
@@ -110,6 +112,25 @@ public class CamDepot implements IPlugin {
         }
         if (pane == null) {
             content = new CamDepotPane(pluginContext, mapView, baseUrl());
+            content.setDetailHost(new CamDepotPane.DetailHost() {
+                @Override
+                public void showDetailPane(android.view.View v) {
+                    if (detailPane != null && uiService.isPaneVisible(detailPane))
+                        uiService.closePane(detailPane);
+                    detailPane = new PaneBuilder(v)
+                            .setMetaValue(Pane.RELATIVE_LOCATION, Pane.Location.Default)
+                            .setMetaValue(Pane.PREFERRED_WIDTH_RATIO, 0.45D)
+                            .setMetaValue(Pane.PREFERRED_HEIGHT_RATIO, 0.85D)
+                            .build();
+                    uiService.showPane(detailPane, null);
+                }
+
+                @Override
+                public void hideDetailPane() {
+                    if (detailPane != null && uiService.isPaneVisible(detailPane))
+                        uiService.closePane(detailPane);
+                }
+            });
             pane = new PaneBuilder(content.getView())
                     .setMetaValue(Pane.RELATIVE_LOCATION, Pane.Location.Default)
                     .setMetaValue(Pane.PREFERRED_WIDTH_RATIO, 0.45D)

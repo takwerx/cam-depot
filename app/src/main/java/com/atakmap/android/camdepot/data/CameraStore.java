@@ -293,7 +293,7 @@ public final class CameraStore {
                     o.optString("co"), o.optString("st"),
                     o.optString("pr"), o.optString("sp"),
                     o.optInt("ptz") == 1, o.optInt("fire") == 1,
-                    o.optString("stream")));
+                    o.optString("stream"), o.optString("still")));
         }
         byState.put(state, m);
         return m.size();
@@ -382,7 +382,14 @@ public final class CameraStore {
      * @return null when the camera has no image filename loaded yet
      */
     public String imageUrl(Camera c) {
-        if (c == null || c.image == null || c.image.isEmpty() || catalog == null)
+        if (c == null)
+            return null;
+        // The agency's own frame wins when there is one. Cache-busted, because these
+        // sit behind a CDN that will otherwise hand back whatever it served last.
+        if (!c.still.isEmpty())
+            return c.still + (c.still.indexOf('?') < 0 ? "?_=" : "&_=")
+                    + (System.currentTimeMillis() / 1000L);
+        if (c.image == null || c.image.isEmpty() || catalog == null)
             return null;
         final long ts = timestampIn(c.image);
         if (ts <= 0)
