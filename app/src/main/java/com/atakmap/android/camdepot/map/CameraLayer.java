@@ -44,6 +44,8 @@ public final class CameraLayer {
     private static final String TAG = "CamDepotLayer";
     private static final String GROUP = "Cam Depot";
     private static final String UID_PREFIX = "camdepot-";
+    /** Marker flag: sensor attributes written and the hideFov listener attached. */
+    private static final String SENSOR_READY = "camdepotSensorReady";
 
     /**
      * Degrees to add to a camera's bearing when aiming its icon.
@@ -656,7 +658,11 @@ public final class CameraLayer {
         // setup entirely, so they never wrote it and their FOV button came up
         // preselected -- looking like a state we had chosen rather than one we had
         // simply never set.
-        m.setMetaBoolean(SensorDetailHandler.HIDE_FOV, true);
+        // hideFov is PRESENCE: set means hidden, absent means shown. A camera whose
+        // bearing was asked for while it was off the map must not be born hidden, or
+        // the request is silently lost the moment it is finally drawn.
+        if (!showing.contains(c.id))
+            m.setMetaBoolean(SensorDetailHandler.HIDE_FOV, true);
         m.setMetaBoolean("readiness", true);
         m.setMetaBoolean("archive", false);
         m.setMetaString("how", "m-g");
@@ -670,6 +676,7 @@ public final class CameraLayer {
             // A listener, not a Shape. This is what lets ATAK's own radial FOV button
             // work without pre-building GL geometry for every camera in view.
             m.addOnMetadataChangedListener(SensorDetailHandler.HIDE_FOV, fovWatch);
+            m.setMetaBoolean(SENSOR_READY, true);
         }
         return m;
     }
@@ -743,7 +750,9 @@ public final class CameraLayer {
         // The line itself.
         m.setMetaDouble(SensorDetailHandler.STROKE_WEIGHT, 5.0);
         m.setMetaInteger(SensorDetailHandler.STROKE_COLOR, LINE_COLOR);
-        m.setMetaInteger(SensorDetailHandler.RANGE_LINES_ATTRIBUTE, 25);
+        // Range rings off; the line carries its bearing as a label instead.
+        m.setMetaInteger(SensorDetailHandler.RANGE_LINES_ATTRIBUTE, 0);
+        m.setMetaBoolean(SensorDetailHandler.DISPLAY_LABELS, true);
         m.setMetaDouble(SensorDetailHandler.RANGE_LINES_STROKE_WEIGHT, 1.0);
         m.setMetaInteger(SensorDetailHandler.RANGE_LINES_STROKE_COLOR, 0xFF000000);
 
@@ -813,7 +822,21 @@ public final class CameraLayer {
                             // marker was already hidden the gate was a no-op and each
                             // pan put the line back -- bearings floating over a map
                             // with no markers on it.
-                            visible && isWithinZoom());
+                            visible && isWithinZoom(),
+                            // Labels on, range rings off.
+                            //
+                            // With bLabels true and rangeLines 0, ATAK writes the
+                            // bearing along the line itself -- so the operator reads
+                            // the azimuth off the map instead of opening the sensor
+                            // pane to find it. The six-argument form we used before
+                            // hard-codes these to false and 100, which is why the line
+                            // was unlabelled and carried range rings nobody asked for.
+                            //
+                            // The azimuth is true north as it arrives: ALERT's pan was
+                            // verified against view.line at a median of 0.00 degrees
+                            // across 1,298 cameras, so nothing is corrected here.
+                            true,
+                            0.0);
             if (f == null) {
                 Log.w(TAG, "ATAK declined to create a SensorFOV for " + c.id);
                 return;
@@ -921,10 +944,17 @@ public final class CameraLayer {
             m.setTrack((c.pan + ICON_HEADING_OFFSET + 360) % 360, 0);
             // NOARROW as well as ROTATE_HEADING: the icon itself carries the
             // direction now, so ATAK's separate heading arrow is redundant clutter.
-            m.setStyle(m.getStyle()
+            //
+            // NOT smooth rotation. That flag animates the icon towards its new
+            // heading over time, while SensorFOV.setMetrics snaps the bearing line
+            // there immediately -- so every move showed the line jump and the icon
+            // glide after it, and which one appeared to lead depended on when you
+            // looked. It was added so a slewing camera would turn rather than snap,
+            // which only works if the line animates too. It does not, so the icon
+            // snaps with it and the two stay together.
+            m.setStyle((m.getStyle() & ~Marker.STYLE_SMOOTH_ROTATION_MASK)
                     | Marker.STYLE_ROTATE_HEADING_MASK
-                    | Marker.STYLE_ROTATE_HEADING_NOARROW_MASK
-                    | Marker.STYLE_SMOOTH_ROTATION_MASK);
+                    | Marker.STYLE_ROTATE_HEADING_NOARROW_MASK);
         } catch (RuntimeException e) {
             Log.w(TAG, "could not aim the icon for " + c.id, e);
         }
@@ -946,6 +976,25 @@ public final class CameraLayer {
             m.setMetaInteger("color", baseColor(c));
         m.setMetaString("remarks", remarks(c));
         if (c.hasFov()) {
+            // Sensor setup is done here, not only at creation.
+            //
+            // A marker is built the moment its camera is drawn, which is routinely
+            // before the moving half of the catalog has arrived -- and with no pan,
+            // c.hasFov() was false, so create() skipped attachSensor AND skipped
+            // registering the hideFov listener. Nothing added them afterwards. The
+            // marker then had no sensor attributes and no listener for the rest of
+            // its life: ATAK's radial toggled a key nobody was watching, and the
+            // bearing never appeared however many times it was pressed.
+            //
+            // Cheap to re-assert: guarded by a flag, so it runs once per marker.
+            if (!m.hasMetaValue(SENSOR_READY)) {
+                attachSensor(m, c);
+                m.addOnMetadataChangedListener(
+                        SensorDetailHandler.HIDE_FOV, fovWatch);
+                m.setMetaBoolean(SENSOR_READY, true);
+                if (showing.contains(c.id))
+                    m.toggleMetaData(SensorDetailHandler.HIDE_FOV, false);
+            }
             // Only the bearing moves between refreshes; everything else is fixed.
             m.setMetaInteger(SensorDetailHandler.AZIMUTH_ATTRIBUTE,
                     (int) Math.round(c.pan));
@@ -975,6 +1024,17 @@ public final class CameraLayer {
     public void showFov(Camera c) {
         if (c == null || !c.hasFov())
             return;
+        // Remember the request whether or not the camera is on the map yet.
+        //
+        // A marker only exists for what is currently drawn, so a camera in another
+        // state, off screen, or below the zoom threshold had no marker and this
+        // returned silently -- the button did nothing and said nothing. Searching is
+        // global, so that is most of the catalog.
+        //
+        // Recording the intent first means create() leaves hideFov off and update()
+        // styles the line the moment the marker is built, so "Go to" brings the
+        // camera into view already showing its bearing.
+        showing.add(c.id);
         final Marker m = markers.get(c.id);
         if (m == null)
             return;
@@ -983,7 +1043,8 @@ public final class CameraLayer {
         m.setMetaInteger(SensorDetailHandler.RANGE_ATTRIBUTE,
                 (int) Math.round(Math.min(rangeMetres,
                         SensorDetailHandler.MAX_SENSOR_RANGE)));
-        setFovVisible(m, true);     // fovWatch draws it
+        setFovVisible(m, true);
+        styleFov(m, c, true);
     }
 
     public void hideFov(String id) {

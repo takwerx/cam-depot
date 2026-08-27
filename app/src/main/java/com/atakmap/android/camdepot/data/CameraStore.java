@@ -165,6 +165,23 @@ public final class CameraStore {
                         public void run() {
                             try {
                                 parseStatic(st, text(body));
+                                // ...and the moving half, or this state's cameras
+                                // arrive with pan = NaN.
+                                //
+                                // Search is global, so a camera found this way is
+                                // outside the panel's state and only ever got its
+                                // static record. hasFov() was therefore false for all
+                                // of them, which silently disabled BOTH the bearing
+                                // (showFov and styleFov bail) and the icon rotation
+                                // (aimIcon bails) -- the button did nothing and the
+                                // marker faced north, on a camera that was in fact
+                                // pointing somewhere and slewing.
+                                MAIN.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        refreshState(st);
+                                    }
+                                });
                             } catch (JSONException | UnsupportedEncodingException e) {
                                 Log.w(TAG, "static parse failed for " + st, e);
                             } catch (RuntimeException e) {
@@ -302,6 +319,86 @@ public final class CameraStore {
     }
 
     /** Re-read pan/tilt/fov/offline for an already-loaded state. */
+    /**
+     * Re-read the moving half for <em>every</em> loaded state in one call.
+     *
+     * <p>Search is global, so the map routinely shows cameras outside the panel's
+     * selected state. Refreshing only that state left those markers frozen: the
+     * picture updated, the camera plainly slewed, and its icon and bearing line sat
+     * still — which reads as the tracking being broken rather than as a state filter.
+     *
+     * <p>Costs nothing extra. The feed is a delta keyed to one global sequence, so
+     * asking for all states returns exactly the cameras that moved, and on a quiet
+     * tick that is still 22 bytes.
+     */
+    public void refreshAllLive() {
+        if (catalog == null || catalog.dynamicBase.isEmpty() || byState.isEmpty()) {
+            refreshState(currentStateHint);
+            return;
+        }
+        final Integer since = seq.get("*");
+        final String url = catalog.dynamicBase
+                + "?since=" + (since != null ? since : 0);
+        Http.get(url, new Http.Callback() {
+            @Override
+            public void onSuccess(final byte[] body) {
+                try {
+                    final String raw = text(body);
+                    if (!raw.startsWith("{"))
+                        return;
+                    final JSONObject env = new JSONObject(raw);
+                    seq.put("*", env.optInt("seq", 0));
+                    final JSONArray a = env.optJSONArray("cams");
+                    if (a == null || a.length() == 0)
+                        return;             // nothing moved anywhere
+                    int hit = 0;
+                    for (int i = 0; i < a.length(); i++) {
+                        final JSONObject o = a.getJSONObject(i);
+                        final String id = o.optString("id");
+                        for (Map<String, Camera> m : byState.values()) {
+                            final Camera c = m.get(id);
+                            if (c == null)
+                                continue;
+                            c.pan = o.isNull("p") ? Double.NaN
+                                    : o.optDouble("p", Double.NaN);
+                            c.tilt = o.isNull("t") ? Double.NaN
+                                    : o.optDouble("t", Double.NaN);
+                            c.fov = o.isNull("f") ? Double.NaN
+                                    : o.optDouble("f", Double.NaN);
+                            c.offline = o.optInt("off") == 1;
+                            hit++;
+                            break;
+                        }
+                    }
+                    if (hit == 0)
+                        return;
+                    Log.d(TAG, "refreshed " + hit + " cameras across "
+                            + byState.size() + " states (live)");
+                    final Map<String, Camera> cur = byState.get(currentStateHint);
+                    listener.onCameras(currentStateHint, cur == null
+                            ? new ArrayList<Camera>()
+                            : new ArrayList<>(cur.values()));
+                } catch (JSONException | UnsupportedEncodingException e) {
+                    Log.w(TAG, "live all-states parse failed", e);
+                }
+            }
+
+            @Override
+            public void onFailure(String error) {
+                Log.w(TAG, "live all-states feed failed (" + error
+                        + "); falling back to the current state's shard");
+                refreshState(currentStateHint, false);
+            }
+        });
+    }
+
+    /** Which state the panel is showing; the one whose list is handed back. */
+    private String currentStateHint = "";
+
+    public void setCurrentState(String state) {
+        this.currentStateHint = state == null ? "" : state;
+    }
+
     public void refreshState(final String state) {
         refreshState(state, true);
     }

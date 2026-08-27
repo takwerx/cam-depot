@@ -113,8 +113,12 @@ public final class CamDepotPane implements CameraStore.Listener {
     private final Runnable refreshTick = new Runnable() {
         @Override
         public void run() {
-            if (store.isLoaded(currentState))
-                store.refreshState(currentState);
+            if (store.isLoaded(currentState)) {
+                // Every loaded state, not just the selected one: search puts other
+                // states' cameras on the map and they must track too.
+                store.setCurrentState(currentState);
+                store.refreshAllLive();
+            }
             handler.postDelayed(this, REFRESH_MS);
         }
     };
