@@ -12,7 +12,7 @@ import com.atakmap.coremap.log.Log;
  * Reads the same number as ATAK's scale bar in the lower left.
  *
  * <p>The point is to give the operator one reference instead of two. A zoom threshold
- * expressed in metres per pixel, or as an invented band like "county level", is a
+ * expressed in meters per pixel, or as an invented band like "county level", is a
  * second scale they have to learn and reconcile against the bar already on screen.
  * Quoting the bar means the panel and the map agree by construction.
  *
@@ -86,8 +86,8 @@ public final class ScaleBar {
         return approximate(mv == null ? 0 : mv.getMapResolution());
     }
 
-    /** The distance the bar spans, in metres — what a threshold is compared against. */
-    public static double metres(MapView mv) {
+    /** The distance the bar spans, in meters — what a threshold is compared against. */
+    public static double meters(MapView mv) {
         final ScaleWidget w = widget(mv);
         if (w != null) {
             try {
@@ -102,15 +102,15 @@ public final class ScaleBar {
     }
 
     /** Format a bar-width distance the way ATAK would, in the operator's units. */
-    public static String describe(double barMetres) {
+    public static String describe(double barMeters) {
         try {
-            return SpanUtilities.formatType(Units.type(), barMetres, Span.METER);
+            return SpanUtilities.formatType(Units.type(), barMeters, Span.METER);
         } catch (RuntimeException e) {
-            return Math.round(barMetres) + " m";
+            return Math.round(barMeters) + " m";
         }
     }
 
-    private static String approximate(double metresPerPixel) {
-        return describe(metresPerPixel * FALLBACK_BAR_PIXELS);
+    private static String approximate(double metersPerPixel) {
+        return describe(metersPerPixel * FALLBACK_BAR_PIXELS);
     }
 }

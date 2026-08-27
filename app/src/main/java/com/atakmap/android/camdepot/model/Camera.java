@@ -88,8 +88,8 @@ public final class Camera {
         return !Double.isNaN(pan) && !Double.isNaN(fov) && fov > 0;
     }
 
-    /** Great-circle distance in metres, for the radius filters. */
-    public double metresFrom(double fromLat, double fromLon) {
+    /** Great-circle distance in meters, for the radius filters. */
+    public double metersFrom(double fromLat, double fromLon) {
         final double R = 6371008.8;
         final double p1 = Math.toRadians(fromLat), p2 = Math.toRadians(lat);
         final double dp = p2 - p1;

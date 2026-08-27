@@ -59,7 +59,7 @@ public final class CameraLayer {
      */
     private static final double ICON_HEADING_OFFSET = -90;
 
-    /** Azimuth-line colour: the same orange as the operator's own sensor marker. */
+    /** Azimuth-line color: the same orange as the operator's own sensor marker. */
     private static final int LINE_COLOR = 0xFFFF7700;
 
     /**
@@ -88,13 +88,13 @@ public final class CameraLayer {
     private static final double STILL_FOV_RANGE_M = 1000;
 
     /**
-     * Resolution to fly to on "Go to", in metres per pixel — close enough to see the
+     * Resolution to fly to on "Go to", in meters per pixel — close enough to see the
      * camera and its surroundings without being on top of it.
      */
     private static final double GOTO_RESOLUTION = 30;
 
     /**
-     * Line length in metres until the operator changes it.
+     * Line length in meters until the operator changes it.
      *
      * <p>60 km, matching {@link SensorDetailHandler#MAX_SENSOR_RANGE} and the operator's
      * own sensor marker. A lookout on a ridge sees a very long way, and a line that
@@ -149,7 +149,7 @@ public final class CameraLayer {
     private int omitted;
 
     /**
-     * Cameras draw at or below this resolution, in metres per pixel. Larger means
+     * Cameras draw at or below this resolution, in meters per pixel. Larger means
      * more zoomed out, so this is a "no further out than" limit.
      *
      * <p>Default is roughly county scale — far enough out to be useful, close enough
@@ -203,7 +203,7 @@ public final class CameraLayer {
     };
 
     private double maxResolution = 500;
-    private double rangeMetres = DEFAULT_RANGE_M;
+    private double rangeMeters = DEFAULT_RANGE_M;
     private boolean gateEnabled = true;
 
     private final android.os.Handler main =
@@ -259,9 +259,9 @@ public final class CameraLayer {
 
     // ---- zoom gating ------------------------------------------------------
 
-    /** @param metresPerPixel cameras draw at or below this; larger means zoomed out */
-    public void setMaxResolution(double metresPerPixel) {
-        this.maxResolution = metresPerPixel;
+    /** @param metersPerPixel cameras draw at or below this; larger means zoomed out */
+    public void setMaxResolution(double metersPerPixel) {
+        this.maxResolution = metersPerPixel;
         applyZoomGate();
     }
 
@@ -532,7 +532,7 @@ public final class CameraLayer {
     }
 
     /**
-     * Colour a marker to say whether its bearing line is on, and repaint it.
+     * Color a marker to say whether its bearing line is on, and repaint it.
      *
      * <p>Everything about this hinges on {@code Marker.setColor} rather than
      * {@code setMetaInteger("color", ...)}:
@@ -543,7 +543,7 @@ public final class CameraLayer {
      *   }
      * </pre>
      *
-     * <p>The plain metadata write does not refresh, so the colour sat in the metadata
+     * <p>The plain metadata write does not refresh, so the color sat in the metadata
      * unpainted until something else forced a refresh — which is what ATAK's own
      * sensor controls do via {@code MapItem.persist()}. That is why the marker turned
      * orange the first time a bearing was shown and never went back: the "on" was an
@@ -647,7 +647,7 @@ public final class CameraLayer {
         //
         // Every camera gets the sensor type, including those with no bearing. That was
         // briefly "fixed" by giving bearingless cameras b-m-p-c so they would not offer
-        // FOV controls they cannot use -- but ATAK does not recognise that type: the
+        // FOV controls they cannot use -- but ATAK does not recognize that type: the
         // details pane reads "Not Recognized [b-m-p-c]" and the marker loses its icon.
         // Unusable controls on a working marker beat a broken one.
         m.setType("b-m-p-s-p-loc");
@@ -737,7 +737,7 @@ public final class CameraLayer {
         m.setMetaInteger(SensorDetailHandler.AZIMUTH_ATTRIBUTE,
                 (int) Math.round(c.pan));
         m.setMetaInteger(SensorDetailHandler.RANGE_ATTRIBUTE,
-                (int) Math.round(Math.min(rangeMetres,
+                (int) Math.round(Math.min(rangeMeters,
                         SensorDetailHandler.MAX_SENSOR_RANGE)));
 
         // The wedge, off. See the class comment: we want the line, not the slice.
@@ -799,7 +799,7 @@ public final class CameraLayer {
                             c.pan,
                             still ? STILL_FOV_DEGREES : 0,  // wedge, or a bearing line
                             still ? STILL_FOV_RANGE_M
-                                  : Math.min(rangeMetres,
+                                  : Math.min(rangeMeters,
                                           SensorDetailHandler.MAX_SENSOR_RANGE),
                             // Line: alpha 0, no fill, per the operator's CoT.
                             // Wedge: translucent white, like Quick Pic's.
@@ -830,7 +830,7 @@ public final class CameraLayer {
                             // the azimuth off the map instead of opening the sensor
                             // pane to find it. The six-argument form we used before
                             // hard-codes these to false and 100, which is why the line
-                            // was unlabelled and carried range rings nobody asked for.
+                            // was unlabeled and carried range rings nobody asked for.
                             //
                             // The azimuth is true north as it arrives: ALERT's pan was
                             // verified against view.line at a median of 0.00 degrees
@@ -919,7 +919,7 @@ public final class CameraLayer {
      *
      * <p>ATAK's stock sensor icon always faces one way, so a hundred cameras all look
      * like they are staring north. Joe's plugin rotated the icon with the azimuth and
-     * that is the behaviour to match: the marker itself carries the bearing, so
+     * that is the behavior to match: the marker itself carries the bearing, so
      * direction is readable at a glance without turning every FOV line on.
      *
      * <p>{@code setTrack(heading, speed)} plus {@code STYLE_ROTATE_HEADING_MASK} is
@@ -966,9 +966,9 @@ public final class CameraLayer {
         // Offline cameras go grey; a camera that cannot see anything should not
         // read the same as one that can.
         //
-        // Cameras with a bearing are the exception: for those the colour doubles as
+        // Cameras with a bearing are the exception: for those the color doubles as
         // the "line is on" indicator, so a refresh must re-assert the SAME state
-        // syncFov set. A refresh that coloured one unconditionally would put the
+        // syncFov set. A refresh that colored one unconditionally would put the
         // orange back on a marker whose line the operator had just switched off.
         if (c.hasFov())
             applyTint(m, c, showing.contains(c.id));
@@ -1041,7 +1041,7 @@ public final class CameraLayer {
         m.setMetaInteger(SensorDetailHandler.AZIMUTH_ATTRIBUTE,
                 (int) Math.round(c.pan));
         m.setMetaInteger(SensorDetailHandler.RANGE_ATTRIBUTE,
-                (int) Math.round(Math.min(rangeMetres,
+                (int) Math.round(Math.min(rangeMeters,
                         SensorDetailHandler.MAX_SENSOR_RANGE)));
         setFovVisible(m, true);
         styleFov(m, c, true);
@@ -1168,20 +1168,20 @@ public final class CameraLayer {
         return showing.contains(id);
     }
 
-    public void setRangeMetres(double metres) {
-        this.rangeMetres = metres;
+    public void setRangeMeters(double meters) {
+        this.rangeMeters = meters;
         for (String id : new ArrayList<>(showing)) {
             final Marker m = markers.get(id);
             if (m != null) {
                 m.setMetaDouble(SensorDetailHandler.RANGE_ATTRIBUTE,
-                        Math.min(metres, SensorDetailHandler.MAX_SENSOR_RANGE));
+                        Math.min(meters, SensorDetailHandler.MAX_SENSOR_RANGE));
                 m.refresh(mapView.getMapEventDispatcher(), null, getClass());
             }
         }
     }
 
-    public double getRangeMetres() {
-        return rangeMetres;
+    public double getRangeMeters() {
+        return rangeMeters;
     }
 
     /** Push a refreshed bearing into a line that is currently showing. */

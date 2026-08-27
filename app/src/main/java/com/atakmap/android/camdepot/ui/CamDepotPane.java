@@ -107,7 +107,7 @@ public final class CamDepotPane implements CameraStore.Listener {
     private String selectedProvider, selectedCounty;
     /** Radius in the operator's own unit (miles / km / NM). 0 means no filter. */
     private double radiusBig = 0;
-    private GeoPoint centre;                  // null means "use my location"
+    private GeoPoint center;                  // null means "use my location"
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable refreshTick = new Runnable() {
@@ -385,7 +385,7 @@ public final class CamDepotPane implements CameraStore.Listener {
                                         }
                                         for (int i = 0; i < PRESET_BAR_BIG.length; i++) {
                                             if (presetLabel(i).equals(value)) {
-                                                setThreshold(presetMetres(i)
+                                                setThreshold(presetMeters(i)
                                                         / scaleBarPixels());
                                                 return;
                                             }
@@ -398,10 +398,10 @@ public final class CamDepotPane implements CameraStore.Listener {
         controls.findViewById(R.id.pick_point).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // Centre on where the map is looking. Simple, predictable, and it
+                // Center on where the map is looking. Simple, predictable, and it
                 // works whether or not the device has a GPS fix.
-                centre = mapView.getPoint().get();
-                toast("Radius now measured from the map centre");
+                center = mapView.getPoint().get();
+                toast("Radius now measured from the map center");
                 apply();
             }
         });
@@ -420,7 +420,7 @@ public final class CamDepotPane implements CameraStore.Listener {
     /**
      * Quote the scale bar, because it is already on screen.
      *
-     * <p>Earlier versions of this readout invented their own vocabulary — metres per
+     * <p>Earlier versions of this readout invented their own vocabulary — meters per
      * pixel, then named bands like "county level" — and both made the operator
      * translate between the panel and the map. The bar in the lower left is the
      * reference they already have, so the threshold is expressed in the same terms.
@@ -436,9 +436,9 @@ public final class CamDepotPane implements CameraStore.Listener {
      */
     /**
      * Preset scale-bar distances, in the operator's <em>own</em> large unit rather
-     * than in metres.
+     * than in meters.
      *
-     * <p>Round metres are not round miles: a 1600 m preset labels itself "1.0 mi",
+     * <p>Round meters are not round miles: a 1600 m preset labels itself "1.0 mi",
      * and 400 m becomes "0.2 mi". Defining them in the display unit keeps every entry
      * a clean number in whatever system ATAK is set to.
      */
@@ -454,8 +454,8 @@ public final class CamDepotPane implements CameraStore.Listener {
             "city block", "neighborhood", "town", "county", "region"
     };
 
-    private static double presetMetres(int i) {
-        return Units.bigToMetres(PRESET_BAR_BIG[i]);
+    private static double presetMeters(int i) {
+        return Units.bigToMeters(PRESET_BAR_BIG[i]);
     }
 
     private static String presetLabel(int i) {
@@ -467,12 +467,12 @@ public final class CamDepotPane implements CameraStore.Listener {
     }
 
     /** Set the threshold, remember it, and redraw. The one path all controls use. */
-    private void setThreshold(double metresPerPixel) {
-        layer.setMaxResolution(metresPerPixel);
+    private void setThreshold(double metersPerPixel) {
+        layer.setMaxResolution(metersPerPixel);
         try {
             android.preference.PreferenceManager
                     .getDefaultSharedPreferences(mapView.getContext())
-                    .edit().putFloat(PREF_ZOOM, (float) metresPerPixel).apply();
+                    .edit().putFloat(PREF_ZOOM, (float) metersPerPixel).apply();
         } catch (RuntimeException e) {
             Log.w(TAG, "could not remember the zoom threshold", e);
         }
@@ -492,7 +492,7 @@ public final class CamDepotPane implements CameraStore.Listener {
     }
 
     /**
-     * The marker colours, spelled out. They were previously discoverable only by
+     * The marker colors, spelled out. They were previously discoverable only by
      * asking, which is the definition of a legend that does not exist. Pinned above
      * the list rather than inside the scrolling filter block, so it is readable
      * whenever a marker is.
@@ -506,11 +506,11 @@ public final class CamDepotPane implements CameraStore.Listener {
         v.setText(b);
     }
 
-    private static void swatch(android.text.SpannableStringBuilder b, int colour,
+    private static void swatch(android.text.SpannableStringBuilder b, int color,
             String label) {
         final int at = b.length();
         b.append("\u25cf");
-        b.setSpan(new android.text.style.ForegroundColorSpan(colour), at, b.length(),
+        b.setSpan(new android.text.style.ForegroundColorSpan(color), at, b.length(),
                 android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         b.append(" ").append(label);
     }
@@ -534,7 +534,7 @@ public final class CamDepotPane implements CameraStore.Listener {
         final double res = mapView.getMapResolution();
         if (res <= 0)
             return 200;
-        final double m = ScaleBar.metres(mapView);
+        final double m = ScaleBar.meters(mapView);
         return m > 0 ? m / res : 200;
     }
 
@@ -544,7 +544,7 @@ public final class CamDepotPane implements CameraStore.Listener {
                 ? "Radius: off — the whole state"
                 : String.format(Locale.US, "Within %.0f %s of %s", radiusBig,
                         Units.bigLabel(),
-                        centre == null ? "my location" : "the map centre"));
+                        center == null ? "my location" : "the map center"));
     }
 
     // ---- store callbacks --------------------------------------------------
@@ -631,7 +631,7 @@ public final class CamDepotPane implements CameraStore.Listener {
         // A name search looks at every state, not just the loaded one. Typing "Moses"
         // while on California found nothing because Moses is in Nevada and Washington,
         // and no one types a camera name expecting it to only search where they happen
-        // to be standing. Without a query, behaviour is unchanged: the selected state.
+        // to be standing. Without a query, behavior is unchanged: the selected state.
         final List<Camera> all = query.isEmpty()
                 ? store.cameras(currentState)
                 : store.everywhere();
@@ -643,8 +643,8 @@ public final class CamDepotPane implements CameraStore.Listener {
         final boolean live = liveOnly.isChecked();
         final boolean still = stillOnly.isChecked();
 
-        GeoPoint from = centre;
-        final double radiusMetres = radiusBig > 0 ? Units.bigToMetres(radiusBig) : 0;
+        GeoPoint from = center;
+        final double radiusMeters = radiusBig > 0 ? Units.bigToMeters(radiusBig) : 0;
         if (from == null) {
             final com.atakmap.android.maps.Marker self = mapView.getSelfMarker();
             if (self != null && self.getPoint() != null)
@@ -684,9 +684,9 @@ public final class CamDepotPane implements CameraStore.Listener {
             if (!q.isEmpty() && !c.label().toLowerCase(Locale.US).contains(q)
                     && !c.id.contains(q))
                 continue;
-            if (radiusMetres > 0 && from != null
-                    && c.metresFrom(from.getLatitude(), from.getLongitude())
-                            > radiusMetres)
+            if (radiusMeters > 0 && from != null
+                    && c.metersFrom(from.getLatitude(), from.getLongitude())
+                            > radiusMeters)
                 continue;
             out.add(c);
         }
@@ -697,8 +697,8 @@ public final class CamDepotPane implements CameraStore.Listener {
                 @Override
                 public int compare(Camera a, Camera b) {
                     return Double.compare(
-                            a.metresFrom(sortFrom.getLatitude(), sortFrom.getLongitude()),
-                            b.metresFrom(sortFrom.getLatitude(), sortFrom.getLongitude()));
+                            a.metersFrom(sortFrom.getLatitude(), sortFrom.getLongitude()),
+                            b.metersFrom(sortFrom.getLatitude(), sortFrom.getLongitude()));
                 }
             });
         } else {
@@ -836,17 +836,17 @@ public final class CamDepotPane implements CameraStore.Listener {
 
         // Slider spans 0..60 km / ~37 mi, the sensor maximum ATAK will honour.
         range.setMax((int) Math.ceil(SensorDetailHandler.MAX_SENSOR_RANGE
-                / Units.bigToMetres(1)));
-        range.setProgress((int) Math.round(layer.getRangeMetres()
-                / Units.bigToMetres(1)));
-        rangeLabel.setText("Bearing line reaches out " + Units.format(layer.getRangeMetres()));
+                / Units.bigToMeters(1)));
+        range.setProgress((int) Math.round(layer.getRangeMeters()
+                / Units.bigToMeters(1)));
+        rangeLabel.setText("Bearing line reaches out " + Units.format(layer.getRangeMeters()));
         range.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar s, int p, boolean user) {
-                final double m = Units.bigToMetres(Math.max(1, p));
+                final double m = Units.bigToMeters(Math.max(1, p));
                 rangeLabel.setText("Bearing line reaches out " + Units.format(m));
                 if (user)
-                    layer.setRangeMetres(m);
+                    layer.setRangeMeters(m);
             }
 
             @Override
@@ -1177,7 +1177,7 @@ public final class CamDepotPane implements CameraStore.Listener {
                 d.append("  ").append(c.county);
             if (from != null) {
                 d.append("  ").append(Units.format(
-                        c.metresFrom(from.getLatitude(), from.getLongitude())));
+                        c.metersFrom(from.getLatitude(), from.getLongitude())));
             }
             if (c.hasStream())
                 d.append("  \u25b6 live");

@@ -16,12 +16,12 @@ import com.atakmap.coremap.conversions.SpanUtilities;
  *
  * <pre>
  *   "0" -&gt; Span.ENGLISH (feet / miles)     &lt;- ATAK's default
- *   "1" -&gt; Span.METRIC  (metres / km)
+ *   "1" -&gt; Span.METRIC  (meters / km)
  *   "2" -&gt; Span.NM      (nautical miles)
  * </pre>
  *
  * <p>Note that 0 is <em>English</em>, not metric. Assuming the obvious ordering gets
- * it exactly backwards, which is how this plugin originally showed kilometres to an
+ * it exactly backwards, which is how this plugin originally showed kilometers to an
  * operator whose ATAK was set to miles.
  *
  * <p>The preference is read on each call rather than cached: it can change in ATAK's
@@ -48,16 +48,16 @@ public final class Units {
         return Span.ENGLISH;
     }
 
-    /** Format a distance in metres the way ATAK would, e.g. "12.4 mi" or "20 km". */
-    public static String format(double metres) {
+    /** Format a distance in meters the way ATAK would, e.g. "12.4 mi" or "20 km". */
+    public static String format(double meters) {
         try {
-            return SpanUtilities.formatType(type(), metres, Span.METER);
+            return SpanUtilities.formatType(type(), meters, Span.METER);
         } catch (RuntimeException e) {
-            return Math.round(metres) + " m";
+            return Math.round(meters) + " m";
         }
     }
 
-    /** The large unit the operator thinks in: miles, kilometres or nautical miles. */
+    /** The large unit the operator thinks in: miles, kilometers or nautical miles. */
     public static Span bigSpan() {
         switch (type()) {
             case Span.METRIC:
@@ -89,16 +89,16 @@ public final class Units {
      * feet and miles and reads as noise. This pins the unit so the list is
      * comparable top to bottom.
      */
-    public static String formatBig(double metres) {
-        final double n = SpanUtilities.convert(metres, Span.METER, bigSpan());
+    public static String formatBig(double meters) {
+        final double n = SpanUtilities.convert(meters, Span.METER, bigSpan());
         final String num = (n < 10 && n != Math.floor(n))
                 ? String.format(java.util.Locale.US, "%.1f", n)
                 : String.format(java.util.Locale.US, "%.0f", n);
         return num + " " + bigLabel();
     }
 
-    /** Convert a count of {@link #bigSpan()} units into metres. */
-    public static double bigToMetres(double n) {
+    /** Convert a count of {@link #bigSpan()} units into meters. */
+    public static double bigToMeters(double n) {
         try {
             return SpanUtilities.convert(n, bigSpan(), Span.METER);
         } catch (RuntimeException e) {
