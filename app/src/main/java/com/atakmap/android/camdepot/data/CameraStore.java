@@ -73,6 +73,8 @@ public final class CameraStore {
     private static final android.os.Handler MAIN =
             new android.os.Handler(android.os.Looper.getMainLooper());
     private Catalog catalog;
+    /** Last change sequence seen from the live feed, per state. */
+    private final Map<String, Integer> seq = new java.util.concurrent.ConcurrentHashMap<>();
 
     public CameraStore(String baseUrl, Listener listener) {
         // One trailing slash, however the preference was typed.
@@ -301,14 +303,60 @@ public final class CameraStore {
 
     /** Re-read pan/tilt/fov/offline for an already-loaded state. */
     public void refreshState(final String state) {
+        refreshState(state, true);
+    }
+
+    /**
+     * @param live try the live feed first; false forces the R2 shard
+     *
+     * <p>The fallback is not decoration. Pan reaches the plugin through this call and
+     * nowhere else, so a dynamic fetch that fails takes every bearing with it: every
+     * camera reads pan=NaN, hasFov() is false, and "Show bearing" does nothing on any
+     * camera in the catalog. That is indistinguishable from the FOV being broken, and
+     * it is what a plain-http dynamic_base did -- Http refuses a non-https request, so
+     * the call died before it left the device and nothing said so.
+     *
+     * <p>So a live-feed failure now falls back to the R2 shard: stale bearings beat no
+     * bearings, and the log says which one was used.
+     */
+    public void refreshState(final String state, final boolean live) {
         final Map<String, Camera> m = byState.get(state);
         if (m == null)
             return;
-        Http.get(baseUrl + "/dynamic/" + state + ".json.gz" + bust(), new Http.Callback() {
+        // Live feed when the catalog names one; the R2 shard otherwise. The shard is
+        // only as fresh as the last publisher run, so a PTZ camera's bearing sits
+        // still on the map however faithfully this timer fires.
+        final boolean useLive = live && catalog != null
+                && !catalog.dynamicBase.isEmpty();
+        // Ask only for what changed. A camera moves rarely, so nearly every call
+        // comes back "nothing" in 22 bytes -- which is what lets this run every few
+        // seconds instead of every minute. Detection is still bounded by ALERT (their
+        // images only change every ~15 s); this removes the wait between the server
+        // knowing and the map knowing, which is the part an operator actually sees.
+        final Integer since = seq.get(state);
+        final String url = useLive
+                ? catalog.dynamicBase + "?st=" + state
+                        + (since != null ? "&since=" + since : "&since=0")
+                : baseUrl + "/dynamic/" + state + ".json.gz" + bust();
+        Http.get(url, new Http.Callback() {
             @Override
             public void onSuccess(final byte[] body) {
                 try {
-                    final JSONArray a = new JSONArray(text(body));
+                    // Live feed with ?since= answers {seq, cams}; the R2 shard is a
+                    // bare array.
+                    final String raw = text(body);
+                    JSONArray a;
+                    if (raw.startsWith("{")) {
+                        final JSONObject env = new JSONObject(raw);
+                        seq.put(state, env.optInt("seq", 0));
+                        a = env.optJSONArray("cams");
+                        if (a == null)
+                            a = new JSONArray();
+                    } else {
+                        a = new JSONArray(raw);
+                    }
+                    if (a.length() == 0)
+                        return;                 // nothing moved; leave the map alone
                     int hit = 0;
                     for (int i = 0; i < a.length(); i++) {
                         final JSONObject o = a.getJSONObject(i);
@@ -321,7 +369,8 @@ public final class CameraStore {
                         c.offline = o.optInt("off") == 1;
                         hit++;
                     }
-                    Log.d(TAG, "refreshed " + hit + "/" + m.size() + " in " + state);
+                    Log.d(TAG, "refreshed " + hit + "/" + m.size() + " in " + state
+                            + (useLive ? " (live)" : " (shard)"));
                     listener.onCameras(state, new ArrayList<>(m.values()));
                 } catch (JSONException | UnsupportedEncodingException e) {
                     Log.w(TAG, "dynamic parse failed for " + state, e);
@@ -331,6 +380,13 @@ public final class CameraStore {
 
             @Override
             public void onFailure(String error) {
+                if (useLive) {
+                    Log.w(TAG, "live feed failed (" + error
+                            + "); falling back to the published shard");
+                    refreshState(state, false);
+                    return;
+                }
+                Log.w(TAG, "dynamic refresh failed for " + state + ": " + error);
                 listener.onError(state + ": " + error);
             }
         });

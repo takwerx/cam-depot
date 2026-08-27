@@ -46,6 +46,16 @@ public final class Catalog {
     public final int format;
     public final String generated;
     public final String imageBase;
+    /**
+     * Live pan/tilt/offline feed, when one is published.
+     *
+     * <p>The static shard only changes when cameras are added or removed, so it can
+     * live on a CDN. The moving half cannot: a PTZ camera re-aims and the catalog on
+     * R2 does not move until someone runs the publisher. This points at a service that
+     * polls upstream on a short timer and serves the current values, so a bearing on
+     * the map follows the camera. Empty means fall back to the R2 shard.
+     */
+    public final String dynamicBase;
     public final int totalCameras;
     public final List<State> states = new ArrayList<>();
     public final List<Provider> providers = new ArrayList<>();
@@ -57,6 +67,7 @@ public final class Catalog {
         format = o.optInt("format", 0);
         generated = o.optString("generated", "");
         imageBase = o.optString("image_base", "");
+        dynamicBase = o.optString("dynamic_base", "");
         totalCameras = o.optJSONObject("counts") == null ? 0
                 : o.getJSONObject("counts").optInt("cameras", 0);
 

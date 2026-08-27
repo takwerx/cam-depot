@@ -59,7 +59,21 @@ public final class CamDepotPane implements CameraStore.Listener {
     private static final String TAG = "CamDepotPane";
 
     /** How often the dynamic shard is re-read. Upstream moves on ~15s; this is polite. */
-    private static final long REFRESH_MS = 60_000;
+    /**
+     * How often the moving half of the catalog is re-read.
+     *
+     * <p>Matched to the proxy's own upstream poll (METADATA_INTERVAL, 15 s) because
+     * there is nothing to gain by asking faster: the proxy would hand back the same
+     * numbers until its next fetch. 15 s is also the floor worth having upstream --
+     * ALERT's only endpoint returns the whole 6.4 MB catalog, so polling it every
+     * 15 s is already ~36 GB a day taken from a wildfire nonprofit, and one poll is
+     * shared by every EUD. Going faster than this is not a tuning decision, it is a
+     * different data source.
+     *
+     * <p>Costs the EUD 22 bytes on a tick where nothing moved, which is nearly all of
+     * them -- the feed answers with a delta, not the whole state.
+     */
+    private static final long REFRESH_MS = 3_000;
 
     private final Context pluginContext;
     private final MapView mapView;
