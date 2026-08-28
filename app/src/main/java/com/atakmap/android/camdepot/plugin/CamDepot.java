@@ -41,6 +41,27 @@ public class CamDepot implements IPlugin {
     Pane pane;
     /** Second pane holding a single camera's picture, so the map stays live. */
     Pane detailPane;
+    /**
+     * True only while one detail pane is being swapped for another.
+     *
+     * <p>Closing the old one fires {@code onPaneClose}, which would otherwise put the
+     * camera list back for the instant before the new picture opens over it.
+     */
+    private boolean swappingDetail;
+    /**
+     * Set when the plugin itself is handing the slot to ATAK — the video player.
+     * Cleared by the close it was set for, and by opening any new detail pane, so it
+     * can never leave a later Close with nothing to go back to.
+     *
+     * <p>The list does NOT come back when the video is closed, and that is a limit
+     * rather than a choice. ATAK's player is not registered as a dropdown this plugin
+     * can listen to: {@code DropDownManager.getTopDropDownKey()} reads null for the
+     * whole time it is playing, sampled every 700 ms on device, so there is no close
+     * to hook. Reopening the list on a timer instead would cover the video, and
+     * opening it before the launch stopped the video playing at all. So back from the
+     * video lands on the map and the toolbar icon reopens the list.
+     */
+    private boolean keepListClosedOnce;
     CamDepotPane content;
 
     public CamDepot(IServiceController serviceController) {
@@ -63,7 +84,7 @@ public class CamDepot implements IPlugin {
                 .setListener(new ToolbarItemAdapter() {
                     @Override
                     public void onClick(ToolbarItem item) {
-                        showPane();
+                        togglePane();
                     }
                 }).setIdentifier(pluginContext.getPackageName())
                 .build();
@@ -104,6 +125,15 @@ public class CamDepot implements IPlugin {
         return DEFAULT_BASE_URL;
     }
 
+    /** One tap opens the camera list, the next clears it off the map. */
+    private void togglePane() {
+        if (pane != null && uiService != null && uiService.isPaneVisible(pane)) {
+            uiService.closePane(pane);
+            return;
+        }
+        showPane();
+    }
+
     private void showPane() {
         final MapView mapView = MapView.getMapView();
         if (mapView == null) {
@@ -115,14 +145,49 @@ public class CamDepot implements IPlugin {
             content.setDetailHost(new CamDepotPane.DetailHost() {
                 @Override
                 public void showDetailPane(android.view.View v) {
-                    if (detailPane != null && uiService.isPaneVisible(detailPane))
+                    if (detailPane != null && uiService.isPaneVisible(detailPane)) {
+                        swappingDetail = true;
                         uiService.closePane(detailPane);
-                    detailPane = new PaneBuilder(v)
+                    }
+                    final Pane opened = new PaneBuilder(v)
                             .setMetaValue(Pane.RELATIVE_LOCATION, Pane.Location.Default)
                             .setMetaValue(Pane.PREFERRED_WIDTH_RATIO, 0.45D)
                             .setMetaValue(Pane.PREFERRED_HEIGHT_RATIO, 0.85D)
                             .build();
-                    uiService.showPane(detailPane, null);
+                    detailPane = opened;
+                    keepListClosedOnce = false;
+                    // Both panes live in the same slot, so opening a camera REPLACES
+                    // the camera list rather than sitting beside it. Closing the
+                    // picture therefore has to put the list back, or the plugin simply
+                    // disappears -- which is what the back key did: it closed the
+                    // detail pane and left the operator on a bare map with no way back
+                    // except the toolbar. Listening for the close rather than doing
+                    // this in the Close button's handler is deliberate; the back key
+                    // never goes through that button.
+                    uiService.showPane(opened,
+                            new IHostUIService.IPaneLifecycleListener() {
+                                @Override
+                                public void onPaneVisible(boolean visible) {
+                                }
+
+                                @Override
+                                public void onPaneClose() {
+                                    if (swappingDetail || detailPane != opened)
+                                        return;     // a newer picture took its place
+                                    if (keepListClosedOnce) {
+                                        keepListClosedOnce = false;
+                                        return;     // the video player has the slot
+                                    }
+                                    if (pane != null && !uiService.isPaneVisible(pane))
+                                        uiService.showPane(pane, null);
+                                }
+                            });
+                    swappingDetail = false;
+                }
+
+                @Override
+                public void keepListClosedOnce() {
+                    keepListClosedOnce = true;
                 }
 
                 @Override
@@ -131,6 +196,10 @@ public class CamDepot implements IPlugin {
                         uiService.closePane(detailPane);
                 }
             });
+            // Default slot, like every other ATAK pane. Pane.Location.Left was tried
+            // to keep the list out of the video player's way; ATAK ignores it and
+            // opens on the right regardless, and the left is not where an operator
+            // expects a tool pane to be.
             pane = new PaneBuilder(content.getView())
                     .setMetaValue(Pane.RELATIVE_LOCATION, Pane.Location.Default)
                     .setMetaValue(Pane.PREFERRED_WIDTH_RATIO, 0.45D)

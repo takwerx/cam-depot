@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A section heading inside the camera list. Same small-caps treatment the filter
+     panel uses for its own group labels, so the list reads as part of the panel
+     rather than as a second design. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/section"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:textSize="10sp"
+    android:textAllCaps="true"
+    android:alpha="0.6"
+    android:paddingTop="10dp"
+    android:paddingBottom="2dp"
+    android:paddingLeft="6dp"
+    android:paddingRight="6dp" />

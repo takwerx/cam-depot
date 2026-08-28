@@ -1,38 +1,99 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- One camera, in a side pane.
+
+     The content scrolls and the buttons are pinned below it. This is not styling: the
+     pane is a fixed 85% of the screen and the layout used to be one unscrolled column,
+     so on a camera that streams the range label and slider pushed the whole button row
+     off the bottom of the pane. Refresh, Go to, Close and Live video were all present
+     and none of them could be touched, which read as "video cameras do not open from
+     the list", since the button that plays them was the one off screen. A stills
+     camera hides the slider, so its three buttons happened to fit, and that difference
+     was the whole of the symptom. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="8dp">
 
-    <TextView
-        android:id="@+id/info"
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- baselineAligned="false" is load bearing. A horizontal LinearLayout
+                 aligns its children by text baseline by default, so the 24sp star
+                 dragged the description down by about a third of a line inside a row
+                 that did not grow to match, and the second line of the description
+                 was clipped under the image. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:baselineAligned="false">
+
+                <TextView
+                    android:id="@+id/info"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:paddingBottom="6dp" />
+
+                <TextView
+                    android:id="@+id/star"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:gravity="center"
+                    android:textSize="24sp"
+                    android:clickable="true"
+                    android:contentDescription="@string/favorite" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/image"
+                android:layout_width="match_parent"
+                android:layout_height="220dp"
+                android:adjustViewBounds="true"
+                android:scaleType="fitCenter"
+                android:contentDescription="@string/camera_image" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- What this camera can do, on its own row. Only cameras that stream get it, so
+         it is hidden rather than squeezed in beside the three below; five weighted
+         buttons across a 45%-wide pane ellipsizes every label. -->
+    <LinearLayout
+        android:id="@+id/stream_actions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="12sp"
-        android:paddingBottom="6dp" />
+        android:orientation="horizontal"
+        android:paddingTop="4dp">
 
-    <ImageView
-        android:id="@+id/image"
-        android:layout_width="match_parent"
-        android:layout_height="220dp"
-        android:adjustViewBounds="true"
-        android:scaleType="fitCenter"
-        android:contentDescription="@string/camera_image" />
+        <Button
+            style="@style/TakwerxButton"
+            android:id="@+id/video"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Video" />
 
-    <TextView
-        android:id="@+id/range_label"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="12sp"
-        android:paddingTop="6dp" />
+        <Button
+            style="@style/TakwerxButton"
+            android:id="@+id/play"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="@string/play_fov" />
+    </LinearLayout>
 
-    <SeekBar
-        android:id="@+id/range"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="50" />
-
+    <!-- Always reachable, whatever the camera is. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -40,15 +101,7 @@
         android:paddingTop="4dp">
 
         <Button
-        style="@style/TakwerxButton"
-            android:id="@+id/play"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="@string/play_fov" />
-
-        <Button
-        style="@style/TakwerxButton"
+            style="@style/TakwerxButton"
             android:id="@+id/refresh"
             android:layout_width="0dp"
             android:layout_weight="1"
@@ -73,14 +126,6 @@
             android:layout_height="wrap_content"
             android:visibility="gone"
             android:text="Close" />
-
-        <Button
-        style="@style/TakwerxButton"
-            android:id="@+id/video"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="Video" />
     </LinearLayout>
 
 </LinearLayout>

@@ -9,6 +9,15 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
+    <!-- First control in the panel, above Where, because it is the one filter that
+         is not about where you are: it spans every state. -->
+    <Button
+        style="@style/TakwerxButton"
+        android:id="@+id/favorites"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp" />
+
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -43,6 +52,14 @@
         android:id="@+id/county"
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
+
+    <!-- Follows the map the way ATAK's Overlay Manager does. Under Where because
+         that is what it filters on: not what a camera is, but where you are looking. -->
+    <CheckBox
+        android:id="@+id/in_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="On screen only" />
 
     <TextView
         android:layout_width="match_parent"

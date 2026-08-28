@@ -25,6 +25,7 @@ import android.widget.Toast;
 
 import com.atak.plugins.impl.PluginLayoutInflater;
 import com.atakmap.android.camdepot.data.CameraStore;
+import com.atakmap.android.camdepot.data.Favorites;
 import com.atakmap.android.cot.detail.SensorDetailHandler;
 import com.atakmap.android.camdepot.data.ScaleBar;
 import com.atakmap.android.camdepot.data.Units;
@@ -90,14 +91,49 @@ public final class CamDepotPane implements CameraStore.Listener {
      * A button that opens an AlertDialog on the MapView context is the safe path.
      */
     private final Button stateButton, providerButton, countyButton;
+    /**
+     * Turns the whole panel into the favorites list. Its own control rather than a
+     * fourth checkbox beside Video / Still / Fire, because it is not the same kind of
+     * filter: those narrow the selected state, this one leaves the state behind.
+     */
+    private final Button favoritesButton;
     private final EditText search;
     private final CheckBox fireOnly, liveOnly, stillOnly;
+    /**
+     * Narrows the list to the map's current extent, and follows it.
+     *
+     * <p>The map layer has always drawn by viewport; the list was the half that did
+     * not follow. ATAK's own Overlay Manager has the same toggle, so this is the
+     * behavior an operator already expects rather than a new idea.
+     */
+    private final CheckBox inView;
     private final SeekBar radius;
     private final TextView radiusLabel, zoomLabel;
     private final ListView list;
     /** Holds the filter controls; they are a header view, not part of the pane. */
     private final View controls;
     private final CameraAdapter adapter;
+
+    /**
+     * The operator's marked cameras, and the one piece of state in this panel that is
+     * <em>not</em> scoped to {@link #currentState}. See {@link Favorites}.
+     */
+    private final Favorites favorites;
+    /**
+     * True while favorites are pinned above the ordinary list.
+     *
+     * <p>Not a mode that <em>replaces</em> the list. An operator wants their own
+     * cameras to hand and the rest of the catalog underneath them in the same
+     * scroller, so Go to is one tap away from either.
+     */
+    private boolean favoritesFirst;
+    /**
+     * The status line's resting color, captured before anything recolors it.
+     *
+     * <p>Read from the view rather than hardcoded so the busy line goes back to
+     * whatever ATAK's theme actually uses, not to a guess at it.
+     */
+    private final int statusColor;
 
     private String currentState = "CA";
     private final List<String> stateCodes = new ArrayList<>();
@@ -150,7 +186,14 @@ public final class CamDepotPane implements CameraStore.Listener {
         @Override
         public void run() {
             updateZoomLabel();
-            updateStatus();
+            // Only when the operator asked the list to follow the map. Without the
+            // toggle this stays what it was -- re-filtering and re-sorting thousands
+            // of cameras on every pan is work for nothing, and the comment above is
+            // still true for that case.
+            if (inView.isChecked())
+                apply();
+            else
+                updateStatus();
         }
     };
 
@@ -159,9 +202,12 @@ public final class CamDepotPane implements CameraStore.Listener {
         this.mapView = mapView;
         this.layer = new CameraLayer(mapView, pluginContext);
         this.store = new CameraStore(baseUrl, this);
+        // MapView context: these have to survive the plugin being reloaded.
+        this.favorites = new Favorites(mapView.getContext());
 
         root = PluginLayoutInflater.inflate(pluginContext, R.layout.main_layout, null);
         status = root.findViewById(R.id.status);
+        statusColor = status.getCurrentTextColor();
         list = root.findViewById(R.id.cameras);
         legend(root.findViewById(R.id.legend));
 
@@ -170,10 +216,12 @@ public final class CamDepotPane implements CameraStore.Listener {
         controls = PluginLayoutInflater.inflate(pluginContext,
                 R.layout.controls_header, null);
         list.addHeaderView(controls, null, false);
+        favoritesButton = controls.findViewById(R.id.favorites);
         stateButton = controls.findViewById(R.id.state);
         providerButton = controls.findViewById(R.id.provider);
         countyButton = controls.findViewById(R.id.county);
         search = controls.findViewById(R.id.search);
+        inView = controls.findViewById(R.id.in_view);
         fireOnly = controls.findViewById(R.id.fire_only);
         liveOnly = controls.findViewById(R.id.live_only);
         stillOnly = controls.findViewById(R.id.still_only);
@@ -192,6 +240,7 @@ public final class CamDepotPane implements CameraStore.Listener {
         list.setAdapter(adapter);
 
         wire();
+        updateFavoritesButton();
         setRadiusFromProgress(0);
         mapView.addOnMapMovedListener(zoomWatch);
         layer.setMaxResolution(savedThreshold());
@@ -225,6 +274,23 @@ public final class CamDepotPane implements CameraStore.Listener {
     public interface DetailHost {
         void showDetailPane(android.view.View v);
         void hideDetailPane();
+
+        /**
+         * The next close of the detail pane is ATAK taking the slot for itself, so
+         * do not put the camera list back over the top of it.
+         *
+         * <p>Launching the video player closes our pane from underneath us, which is
+         * indistinguishable from the operator pressing Close. Restoring the list
+         * there covered the video the instant it opened, and read as "play sends me
+         * back to the list".
+         *
+         * <p>Showing the list first instead, so the video would stack above it and
+         * the back key could unwind to it, was tried and is worse: the restore is
+         * delivered asynchronously and landed after the player had opened, so the
+         * video did not play at all. The slot goes to the player, and nothing else
+         * touches it.
+         */
+        void keepListClosedOnce();
     }
 
     private DetailHost detailHost;
@@ -260,7 +326,7 @@ public final class CamDepotPane implements CameraStore.Listener {
             public void afterTextChanged(Editable e) {
                 if (search.getText().length() > 0 && !loadedAll) {
                     loadedAll = true;
-                    status.setText("Loading every state so search covers all of them…");
+                    busy("Building the camera list for every state…");
                     store.loadAllStates(new Runnable() {
                         @Override
                         public void run() {
@@ -280,9 +346,33 @@ public final class CamDepotPane implements CameraStore.Listener {
                         apply();
                     }
                 };
+        inView.setOnCheckedChangeListener(cc);
         fireOnly.setOnCheckedChangeListener(cc);
         liveOnly.setOnCheckedChangeListener(cc);
         stillOnly.setOnCheckedChangeListener(cc);
+
+        favoritesButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                favoritesFirst = !favoritesFirst;
+                // A favorite in a state that has never been selected has no name and
+                // no position until its static shard is in. Same fetch global search
+                // makes, and it only ever happens once a session.
+                if (favoritesFirst && !loadedAll) {
+                    loadedAll = true;
+                    busy("Building the camera list so favorites outside "
+                            + currentState + " can be listed\u2026");
+                    store.loadAllStates(new Runnable() {
+                        @Override
+                        public void run() {
+                            apply();
+                        }
+                    });
+                }
+                updateFavoritesButton();
+                apply();
+            }
+        });
 
         stateButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -297,7 +387,8 @@ public final class CamDepotPane implements CameraStore.Listener {
                         layer.clear();
                         stateButton.setText(value);
                         countyButton.setText("All counties");
-                        status.setText(String.format(Locale.US, "Loading %s…", value));
+                        busy(String.format(Locale.US,
+                                "Building camera list for %s…", value));
                         store.loadState(value);
                     }
                 });
@@ -411,8 +502,11 @@ public final class CamDepotPane implements CameraStore.Listener {
             public void onItemClick(AdapterView<?> p, View v, int pos, long id) {
                 // Position includes the header view, so shift back into the adapter.
                 final int i = pos - list.getHeaderViewsCount();
-                if (i >= 0 && i < adapter.getCount())
-                    showDetail(adapter.getItem(i));
+                if (i < 0 || i >= adapter.getCount())
+                    return;
+                final Object row = adapter.getItem(i);
+                if (row instanceof Camera)
+                    showDetail((Camera) row);
             }
         });
     }
@@ -515,6 +609,74 @@ public final class CamDepotPane implements CameraStore.Listener {
         b.append(" ").append(label);
     }
 
+    /**
+     * Star or hollow star, and the count. The count is on the control for the same
+     * reason the provider and Video/Still/Fire filters carry theirs: a filter should
+     * say what it will cost before it is used.
+     */
+    private void updateFavoritesButton() {
+        final int n = favorites.size();
+        if (!favoritesFirst) {
+            favoritesButton.setText(String.format(Locale.US,
+                    "\u2606 Favorites (%d)", n));
+            return;
+        }
+        // Gold star, the same gold the starred rows wear. The button is a filter that
+        // stays on across everything else the operator does, so it has to read as ON
+        // from across the panel rather than by being read word by word.
+        final String text = String.format(Locale.US, "\u2605 Favorites First (%d)", n);
+        final android.text.SpannableString styled =
+                new android.text.SpannableString(text);
+        styled.setSpan(new android.text.style.ForegroundColorSpan(STAR_ON), 0, 1,
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        favoritesButton.setText(styled);
+    }
+
+    /** Marked. The one gold in the plugin, so a star is a star wherever it appears. */
+    private static final int STAR_ON = 0xFFFFC107;
+    /** Unmarked: present enough to be found, quiet enough not to be a row of stars. */
+    private static final int STAR_OFF = 0x66FFFFFF;
+
+    /** Paint one star, wherever it lives. */
+    private void styleStar(TextView star, String id) {
+        final boolean on = favorites.contains(id);
+        star.setText(on ? "\u2605" : "\u2606");
+        star.setTextColor(on ? STAR_ON : STAR_OFF);
+    }
+
+    /**
+     * Mark or unmark, then make every view that shows it agree.
+     *
+     * <p>The same camera can be starred in the row and in the detail pane at the same
+     * moment, and the count sits on a third control.
+     */
+    private void toggleFavorite(Camera c, TextView star) {
+        favorites.toggle(c.id);
+        styleStar(star, c.id);
+        updateFavoritesButton();
+        adapter.notifyDataSetChanged();
+        if (favoritesFirst)
+            apply();
+    }
+
+    /**
+     * Say, in color, that the plugin is working.
+     *
+     * <p>Switching state fetches a shard and parses it off the main thread, which on
+     * New York is a couple of seconds of a stale list sitting there looking finished.
+     * The message existed already and read as part of the furniture; green separates
+     * "I am doing something" from the ordinary count line without adding a spinner.
+     * Green rather than blue on purpose -- blue is already the DOT/FAA swatch in the
+     * legend directly above, and a second meaning for the same color in the same
+     * panel is how a legend stops being one.
+     */
+    private static final int STATUS_BUSY = 0xFF4CAF50;
+
+    private void busy(String message) {
+        status.setTextColor(STATUS_BUSY);
+        status.setText(message);
+    }
+
     private void updateZoomLabel() {
         final String bar = ScaleBar.text(mapView);
         final double limit = layer.getMaxResolution();
@@ -554,6 +716,10 @@ public final class CamDepotPane implements CameraStore.Listener {
         stateCodes.clear();
         for (Catalog.State st : catalog.states)
             stateCodes.add(st.code);
+        // Alphabetical, not publisher order. Forty entries in whatever sequence the
+        // catalog happened to be generated in is a list you have to read rather than
+        // scan, and the operator already knows which state they want.
+        Collections.sort(stateCodes, String.CASE_INSENSITIVE_ORDER);
 
 
         stateButton.setText(currentState);
@@ -614,6 +780,22 @@ public final class CamDepotPane implements CameraStore.Listener {
             selectedCounty = null;              // that county is not in this state
             countyButton.setText(ALL_COUNTIES);
         }
+        // Favorites are cross-state, so a saved one is very often in a state this
+        // session has never selected -- and an id with no static record has no name
+        // and nowhere to go to. Fetch the rest now, once the first state is in, so
+        // the Favorites button is instant when it is pressed. Deferred to here rather
+        // than run from onCatalog because loadAllStates skips states already loaded,
+        // and at onCatalog time the selected one has not arrived yet: starting both
+        // there fetches it twice.
+        if (!loadedAll && !favorites.isEmpty()) {
+            loadedAll = true;
+            store.loadAllStates(new Runnable() {
+                @Override
+                public void run() {
+                    apply();
+                }
+            });
+        }
         apply();
     }
 
@@ -638,6 +820,18 @@ public final class CamDepotPane implements CameraStore.Listener {
         final String q = query.toLowerCase(Locale.US);
         final String provider = selectedProvider;
         final String county = selectedCounty;
+
+        // The map's current extent, read once rather than per camera. Compared as
+        // bare doubles instead of GeoBounds.contains(GeoPoint) so a pan does not
+        // allocate a GeoPoint per camera across a 30,000-camera catalog.
+        final boolean onScreen = inView.isChecked();
+        final com.atakmap.coremap.maps.coords.GeoBounds view =
+                onScreen ? mapView.getBounds() : null;
+        final double vN = view == null ? 0 : view.getNorth();
+        final double vS = view == null ? 0 : view.getSouth();
+        final double vW = view == null ? 0 : view.getWest();
+        final double vE = view == null ? 0 : view.getEast();
+        final boolean idl = view != null && view.crossesIDL();
 
         final boolean fire = fireOnly.isChecked();
         final boolean live = liveOnly.isChecked();
@@ -681,57 +875,140 @@ public final class CamDepotPane implements CameraStore.Listener {
                 continue;
             if (q.isEmpty() && county != null && !county.equalsIgnoreCase(c.county))
                 continue;
-            if (!q.isEmpty() && !c.label().toLowerCase(Locale.US).contains(q)
-                    && !c.id.contains(q))
+            if (!q.isEmpty() && !matchesQuery(c, q))
                 continue;
             if (radiusMeters > 0 && from != null
                     && c.metersFrom(from.getLatitude(), from.getLongitude())
                             > radiusMeters)
                 continue;
+            if (onScreen && !inside(c, vN, vS, vW, vE, idl))
+                continue;
             out.add(c);
         }
 
         final GeoPoint sortFrom = from;
-        if (sortFrom != null) {
-            Collections.sort(out, new Comparator<Camera>() {
+
+        // The favorites section is gathered separately and from everywhere(), never
+        // from the filtered result. Favorites are cross-state by nature, so anything
+        // that reads them out of cameras(currentState) -- or out of a list the state,
+        // county, radius and Show filters have already been over -- lists only the
+        // ones that happen to match the panel right now. That assumption is what
+        // caused five separate bugs on 2026-08-27; it does not get to come back in
+        // through the favorites list of all places.
+        //
+        // Only the search box narrows this section, because that is the operator
+        // typing this second rather than a filter left set an hour ago.
+        final List<Camera> favs = new ArrayList<>();
+        if (favoritesFirst && !favorites.isEmpty()) {
+            for (Camera c : store.everywhere()) {
+                if (c.offline || !favorites.contains(c.id))
+                    continue;
+                if (!q.isEmpty() && !matchesQuery(c, q))
+                    continue;
+                favs.add(c);
+            }
+            // A favorite in the current state would otherwise appear twice, once in
+            // each section.
+            final java.util.Set<String> pinned = new java.util.HashSet<>();
+            for (Camera c : favs)
+                pinned.add(c.id);
+            for (java.util.Iterator<Camera> it = out.iterator(); it.hasNext(); ) {
+                if (pinned.contains(it.next().id))
+                    it.remove();
+            }
+        }
+
+        sortForList(favs, sortFrom);
+        sortForList(out, sortFrom);
+
+        // The count belongs on the control: a filter says what it will cost before
+        // it is used, and this one's cost changes every time the map moves.
+        // out only, not the pinned favorites: those are deliberately exempt from
+        // every filter including this one, and each section carries its own count.
+        inView.setText(onScreen
+                ? String.format(Locale.US, "On screen only (%,d)", out.size())
+                : "On screen only");
+
+        adapter.setSections(favs, out, sortFrom, currentState, query);
+
+        // The layer takes the whole selection and decides what to draw from the
+        // current viewport, so zooming in reveals cameras rather than keeping a set
+        // chosen when the map was somewhere else. Favorites go in too, or a Go to
+        // from the pinned section arrives at empty ground.
+        final List<Camera> drawn = new ArrayList<>(favs);
+        drawn.addAll(out);
+        layer.show(drawn);
+
+        lastFavorites = favs.size();
+        lastMatched = out.size();
+        lastTotal = all.size();
+        updateStatus();
+    }
+
+    /** Nearest first when there is somewhere to measure from, by name otherwise. */
+    private static void sortForList(List<Camera> cameras, final GeoPoint from) {
+        if (from != null) {
+            Collections.sort(cameras, new Comparator<Camera>() {
                 @Override
                 public int compare(Camera a, Camera b) {
                     return Double.compare(
-                            a.metersFrom(sortFrom.getLatitude(), sortFrom.getLongitude()),
-                            b.metersFrom(sortFrom.getLatitude(), sortFrom.getLongitude()));
+                            a.metersFrom(from.getLatitude(), from.getLongitude()),
+                            b.metersFrom(from.getLatitude(), from.getLongitude()));
                 }
             });
         } else {
-            Collections.sort(out, new Comparator<Camera>() {
+            Collections.sort(cameras, new Comparator<Camera>() {
                 @Override
                 public int compare(Camera a, Camera b) {
                     return a.label().compareToIgnoreCase(b.label());
                 }
             });
         }
-
-        adapter.setItems(out, sortFrom);
-
-        // The layer takes the whole selection and decides what to draw from the
-        // current viewport, so zooming in reveals cameras rather than keeping a set
-        // chosen when the map was somewhere else.
-        layer.show(new ArrayList<>(out));
-
-        lastMatched = out.size();
-        lastTotal = all.size();
-        updateStatus();
     }
 
-    private int lastMatched, lastTotal;
+    /**
+     * Is this camera inside the map's current extent?
+     *
+     * <p>The longitude test flips when the view straddles the antimeridian: west is
+     * then numerically greater than east, so "outside" becomes an AND rather than an
+     * OR. Nothing in the catalog is near the line today, and a filter that silently
+     * empties itself over the Pacific is the kind of thing found much later.
+     */
+    private static boolean inside(Camera c, double n, double s, double w, double e,
+            boolean idl) {
+        if (c.lat > n || c.lat < s)
+            return false;
+        return idl ? !(c.lon < w && c.lon > e) : !(c.lon < w || c.lon > e);
+    }
+
+    /** @param q the search box, already trimmed and lower-cased */
+    private static boolean matchesQuery(Camera c, String q) {
+        return c.label().toLowerCase(Locale.US).contains(q) || c.id.contains(q);
+    }
+
+    private int lastMatched, lastTotal, lastFavorites;
     private boolean loadedAll;
 
     private void updateStatus() {
         // Three separate facts, and cramming them into one sentence made the panel
         // unreadable: how many cameras exist, how many the filters kept, and how many
         // of those actually got drawn. One line each, in that order.
+        // Back to the resting color: whatever was being built has been.
+        status.setTextColor(statusColor);
         final StringBuilder msg = new StringBuilder();
         msg.append(String.format(Locale.US, "%,d of %,d %s cameras up and matching",
                 lastMatched, lastTotal, currentState));
+        if (favoritesFirst) {
+            // A favorites list that is quietly shorter than its own count reads as
+            // favorites having been lost.
+            final int gone = favorites.size() - lastFavorites;
+            msg.append(String.format(Locale.US, "\nFavorites: %,d pinned above",
+                    lastFavorites));
+            if (gone > 0)
+                msg.append(String.format(Locale.US,
+                        ", %,d not listed \u2014 offline, still loading, or not "
+                                + "matching the search", gone));
+        }
         if (!layer.isWithinZoom())
             msg.append("\nMap: none drawn — zoom in past your threshold");
         else if (layer.getOmitted() > 0)
@@ -806,10 +1083,17 @@ public final class CamDepotPane implements CameraStore.Listener {
         final ImageView image = v.findViewById(R.id.image);
         final Button play = v.findViewById(R.id.play);
         final Button refresh = v.findViewById(R.id.refresh);
-        final SeekBar range = v.findViewById(R.id.range);
-        final TextView rangeLabel = v.findViewById(R.id.range_label);
 
         info.setText(describe(c));
+
+        final TextView star = v.findViewById(R.id.star);
+        styleStar(star, c.id);
+        star.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View b) {
+                toggleFavorite(c, (TextView) b);
+            }
+        });
 
         // A stills camera shows its bearing for as long as its picture is open.
         //
@@ -834,29 +1118,16 @@ public final class CamDepotPane implements CameraStore.Listener {
             play.setText("No bearing reported");
         }
 
-        // Slider spans 0..60 km / ~37 mi, the sensor maximum ATAK will honour.
-        range.setMax((int) Math.ceil(SensorDetailHandler.MAX_SENSOR_RANGE
-                / Units.bigToMeters(1)));
-        range.setProgress((int) Math.round(layer.getRangeMeters()
-                / Units.bigToMeters(1)));
-        rangeLabel.setText("Bearing line reaches out " + Units.format(layer.getRangeMeters()));
-        range.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar s, int p, boolean user) {
-                final double m = Units.bigToMeters(Math.max(1, p));
-                rangeLabel.setText("Bearing line reaches out " + Units.format(m));
-                if (user)
-                    layer.setRangeMeters(m);
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar s) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar s) {
-            }
-        });
+        // No bearing-length slider here, deliberately.
+        //
+        // It read as broken because on a stills camera it WAS: CameraLayer draws
+        // those with a fixed 1 km line and never consults the slider, so on the FAA
+        // cameras -- the first stills in the catalog with a real bearing -- it moved
+        // and nothing happened. It did work on cameras that stream. Removed rather
+        // than fixed at the operator's call: a per-camera length control is a knob
+        // for a line whose job is to say which way the camera points, not how far it
+        // sees. If it comes back it belongs in the panel as one setting, not in
+        // every camera's pane.
 
         play.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -901,21 +1172,31 @@ public final class CamDepotPane implements CameraStore.Listener {
             v.findViewById(R.id.goto_cam).setVisibility(View.VISIBLE);
             v.findViewById(R.id.close_pane).setVisibility(View.VISIBLE);
 
-            // A stills camera's pane is the picture and nothing else.
+            // Every control in the pane earns its place or is not there.
             //
-            // The bearing-line controls belong to cameras that stream, where the line
-            // answers "how far can it see" and is worth tuning. On a stills camera the
-            // operator opened the pane to look at a photograph; a range slider reading
-            // "38.00 mi", a bearing toggle and a dead video button are all answering
-            // questions nobody asked. The bearing still shows on the MAP while the
-            // picture is open -- that part they wanted -- it just is not driven from
-            // here.
-            if (!c.hasStream()) {
-                rangeLabel.setVisibility(View.GONE);
-                range.setVisibility(View.GONE);
-                play.setVisibility(View.GONE);
-                v.findViewById(R.id.video).setVisibility(View.GONE);
-            }
+            // The bearing controls are gated on the camera REPORTING a bearing, and
+            // on nothing else. Those are different questions from whether it
+            // streams, and conflating them broke it twice in opposite directions:
+            // first a range slider reading "37.28 mi" under a video camera whose own
+            // button said "No bearing reported", then no controls at all on a stills
+            // camera that does have one.
+            //
+            // The second is the worse of the two. Opening a stills camera turns its
+            // bearing on automatically -- that is the point, it answers "what am I
+            // looking at?" while the picture is up -- so a stills camera with no
+            // toggle is a bearing the operator can switch on and not off. ATAK's
+            // radial is no escape either: on these markers it flashes and closes.
+            // The FAA cameras are the first stills in the catalog to publish a real
+            // bearing, which is what surfaced it.
+            final boolean bearing = c.hasFov();
+            final View videoButton = v.findViewById(R.id.video);
+            play.setVisibility(bearing ? View.VISIBLE : View.GONE);
+            videoButton.setVisibility(c.hasStream() ? View.VISIBLE : View.GONE);
+            // The whole row when nothing is left in it: an emptied row still carries
+            // its own padding, and the pinned buttons below it are the one thing that
+            // must not drift down the pane.
+            v.findViewById(R.id.stream_actions).setVisibility(
+                    bearing || c.hasStream() ? View.VISIBLE : View.GONE);
             v.findViewById(R.id.goto_cam).setOnClickListener(
                     new View.OnClickListener() {
                         @Override
@@ -994,20 +1275,66 @@ public final class CamDepotPane implements CameraStore.Listener {
 
     private void launchVideo(Camera c, String url) {
         try {
-            final gov.tak.api.video.ConnectionEntry ce =
-                    com.atakmap.android.video.StreamManagementUtils
-                            .createConnectionEntryFromUrl(c.label(), url);
+            // A camera that streams gets the layer's entry: raw protocol, whole URL
+            // as the address. That is the shape confirmed playing on device, and it
+            // is the one the radial menu hands the player. Building a second one here
+            // out of the same URL produced an entry that looked right and did not
+            // play, so the same camera worked from the radial and not from this
+            // button. Stills fall back to the ordinary parse, which is all they need.
+            gov.tak.api.video.ConnectionEntry ce = layer.videoEntry(c);
+            if (ce == null)
+                ce = com.atakmap.android.video.StreamManagementUtils
+                        .createConnectionEntryFromUrl(c.label(), url);
             if (ce == null) {
                 toast("ATAK would not accept that URL");
                 return;
             }
+            // Hand the player an EMPTY right-hand slot, then broadcast.
+            //
+            // ATAK's video player is a right-side dropdown, and our camera pane is
+            // sitting in that slot. Broadcasting with it still open made ATAK log
+            // "right side in use and the new drop down is not switchable" and evict
+            // our pane in the middle of the player's own show sequence: the video
+            // surface was never created, no track was discovered, and nothing
+            // played. From the radial the same camera, with a byte-identical
+            // ConnectionEntry, logged "right side is empty" and played every time.
+            // The entry was never the difference; the occupied slot was.
+            //
+            // keepListClosedOnce() first, or closing the pane brings the camera list
+            // back into the slot we are trying to empty -- which is the same failure
+            // wearing a different hat, and is what an earlier attempt at this did.
+            //
+            // The delay lets the close actually land. closePane posts its own work,
+            // so broadcasting in the same turn races it for the slot.
+            if (detailHost != null) {
+                detailHost.keepListClosedOnce();
+                detailHost.hideDetailPane();
+                final gov.tak.api.video.ConnectionEntry entry = ce;
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        broadcastVideo(c, entry);
+                    }
+                }, 250);
+                return;
+            }
+            broadcastVideo(c, ce);
+        } catch (LinkageError | RuntimeException e) {
+            Log.w(TAG, "video launch failed", e);
+            toast("Could not open the video player");
+        }
+    }
+
+    /** The broadcast itself, once the pane slot is clear. */
+    private void broadcastVideo(Camera c, gov.tak.api.video.ConnectionEntry ce) {
+        try {
             final android.content.Intent i =
                     new android.content.Intent("com.atakmap.maps.video.DISPLAY");
             i.putExtra("CONNECTION_ENTRY", ce);
             i.putExtra("cancelClose", "true");
             com.atakmap.android.ipc.AtakBroadcast.getInstance().sendBroadcast(i);
         } catch (LinkageError | RuntimeException e) {
-            Log.w(TAG, "video launch failed", e);
+            Log.w(TAG, "video launch failed for " + c.id, e);
             toast("Could not open the video player");
         }
     }
@@ -1134,23 +1461,51 @@ public final class CamDepotPane implements CameraStore.Listener {
 
     private final class CameraAdapter extends BaseAdapter {
 
-        private List<Camera> items = new ArrayList<>();
+        /** Each entry is either a heading {@link String} or a {@link Camera}. */
+        private List<Object> rows = new ArrayList<>();
         private GeoPoint from;
 
-        void setItems(List<Camera> items, GeoPoint from) {
-            this.items = items;
+        private static final int TYPE_HEADING = 0;
+        private static final int TYPE_CAMERA = 1;
+
+        /**
+         * Two sections in one scroller: the operator's own cameras, then everything
+         * the filters matched.
+         *
+         * <p>Headings only appear when there is something above <em>and</em> below to
+         * separate. An unpinned list is exactly what it was before this existed.
+         */
+        void setSections(List<Camera> favorites, List<Camera> rest, GeoPoint from,
+                String state, String query) {
+            final List<Object> next = new ArrayList<>(
+                    favorites.size() + rest.size() + 2);
+            if (!favorites.isEmpty()) {
+                next.add(String.format(Locale.US, "Favorites (%,d)",
+                        favorites.size()));
+                next.addAll(favorites);
+                // Name the second section for what is actually in it. With a search
+                // running it spans every state, so calling it "CA cameras" would be
+                // a lie the operator can see on the rows themselves.
+                next.add(query.isEmpty()
+                        ? String.format(Locale.US, "%s cameras (%,d)", state,
+                                rest.size())
+                        : String.format(Locale.US, "Search results (%,d)",
+                                rest.size()));
+            }
+            next.addAll(rest);
+            this.rows = next;
             this.from = from;
             notifyDataSetChanged();
         }
 
         @Override
         public int getCount() {
-            return items.size();
+            return rows.size();
         }
 
         @Override
-        public Camera getItem(int i) {
-            return items.get(i);
+        public Object getItem(int i) {
+            return rows.get(i);
         }
 
         @Override
@@ -1159,12 +1514,42 @@ public final class CamDepotPane implements CameraStore.Listener {
         }
 
         @Override
+        public int getViewTypeCount() {
+            return 2;
+        }
+
+        @Override
+        public int getItemViewType(int i) {
+            return rows.get(i) instanceof Camera ? TYPE_CAMERA : TYPE_HEADING;
+        }
+
+        /** A heading is not a camera; it must not highlight or open anything. */
+        @Override
+        public boolean areAllItemsEnabled() {
+            return false;
+        }
+
+        @Override
+        public boolean isEnabled(int i) {
+            return rows.get(i) instanceof Camera;
+        }
+
+        @Override
         public View getView(int position, View convertView, ViewGroup parent) {
+            if (getItemViewType(position) == TYPE_HEADING) {
+                View h = convertView;
+                if (h == null)
+                    h = PluginLayoutInflater.inflate(pluginContext,
+                            R.layout.list_section, null);
+                ((TextView) h.findViewById(R.id.section))
+                        .setText((String) rows.get(position));
+                return h;
+            }
             View v = convertView;
             if (v == null)
                 v = PluginLayoutInflater.inflate(pluginContext,
                         R.layout.camera_row, null);
-            final Camera c = getItem(position);
+            final Camera c = (Camera) rows.get(position);
 
             final TextView name = v.findViewById(R.id.name);
             final TextView detail = v.findViewById(R.id.detail);
@@ -1190,6 +1575,15 @@ public final class CamDepotPane implements CameraStore.Listener {
             g.setColor(c.offline ? 0xFF808080
                     : (c.fire ? 0xFFFF6600 : 0xFF33B5E5));
             dot.setBackground(g);
+
+            final TextView star = v.findViewById(R.id.star);
+            styleStar(star, c.id);
+            star.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View b) {
+                    toggleFavorite(c, (TextView) b);
+                }
+            });
 
             final Button go = v.findViewById(R.id.goto_btn);
             go.setOnClickListener(new View.OnClickListener() {

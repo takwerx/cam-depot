@@ -91,7 +91,19 @@ public final class CameraLayer {
      * Resolution to fly to on "Go to", in meters per pixel — close enough to see the
      * camera and its surroundings without being on top of it.
      */
-    private static final double GOTO_RESOLUTION = 30;
+    /**
+     * How close "Go to" arrives, in meters per pixel.
+     *
+     * <p>This was 30, which is roughly a seven-mile scale bar — and an operator who
+     * had already zoomed in was usually AT 30 or closer, so Go to panned exactly onto
+     * the camera and changed the view not at all. It centered correctly and looked
+     * like it had done nothing, because arriving somewhere is not visible if the
+     * altitude never changes. 8 puts the camera and a couple of miles around it on
+     * screen, which is close enough to read as having gone there. 3 is closer again,
+     * about a half-mile scale bar, which is what the operator asked for once they had
+     * seen 8 on the device: close enough to see the road the camera is watching.
+     */
+    private static final double GOTO_RESOLUTION = 3;
 
     /**
      * Line length in meters until the operator changes it.
@@ -117,7 +129,18 @@ public final class CameraLayer {
      * Markers added per pass. Small enough to fit comfortably in a frame, large
      * enough that a few thousand cameras land in well under a second.
      */
-    private static final int BATCH = 120;
+    private static final int BATCH = 50;
+    /**
+     * A frame's worth of pause between batches.
+     *
+     * <p>Re-posting with no delay put the next batch straight back on the looper, so
+     * the main thread ran marker work end to end and input had to fight for a slot.
+     * Yielding a frame costs nothing an operator can see -- the map fills in over a
+     * few hundred milliseconds either way -- and keeps the UI answering. Confirmed
+     * from the ANR captured 2026-08-28 10:40, whose main thread was inside
+     * MapGroup.addItem under addTick.
+     */
+    private static final long BATCH_PAUSE_MS = 16;
 
     private final MapView mapView;
     private final android.content.Context pluginContext;
@@ -396,7 +419,7 @@ public final class CameraLayer {
                 remove(removing.remove(removing.size() - 1));
             }
             if (!removing.isEmpty())
-                main.post(this);
+                main.postDelayed(this, BATCH_PAUSE_MS);
         }
     };
 
@@ -415,10 +438,19 @@ public final class CameraLayer {
                 shown.put(c.id, c);
                 m.setVisible(isWithinZoom());
             }
-            // One registration call for the whole batch, after the markers exist.
-            flushVideoEntries();
-            if (!pending.isEmpty())
-                main.post(this);
+            // Register video entries ONCE, when the queue is empty -- not per batch.
+            //
+            // Every addConnectionEntries call broadcasts REFRESH_HIERARCHY whatever
+            // the persist flag says, and that rebuilds ATAK's Overlay Manager on the
+            // main thread. Per batch, a full map was 21 rebuilds rather than one, and
+            // the catalog going from 13,698 cameras to 30,393 is what pushed it past
+            // the ANR window. The comment on flushVideoEntries always said one call,
+            // not one per camera; this makes the batching match it.
+            if (pending.isEmpty()) {
+                flushVideoEntries();
+            } else {
+                main.postDelayed(this, BATCH_PAUSE_MS);
+            }
         }
     };
 
@@ -494,40 +526,90 @@ public final class CameraLayer {
             return;
         }
         try {
-            // protocol=raw with the whole URL as the address, port -1.
-            //
-            // This is the shape from the operator's working CoT, and it is confirmed
-            // playing on device. It was briefly "corrected" to let ATAK infer the
-            // protocol from the URL, on the theory that raw suited MJPEG and HLS
-            // needed HTTPS. That broke playback outright. The theory was wrong; raw
-            // is right for these too. Do not change it again without a camera that
-            // demonstrably fails under raw and plays under something else.
-            String uid = videoUids.get(c.id);
-            if (uid == null)
-                uid = java.util.UUID.randomUUID().toString();
-            final gov.tak.api.video.ConnectionEntry ce =
-                    new gov.tak.api.video.ConnectionEntry(c.label(), c.stream);
-            ce.setUID(uid);
-            ce.setAddress(c.stream);
-            ce.setPort(-1);
-            ce.setPath("");
-            ce.setNetworkTimeout(12000);
-            ce.setBufferTime(-1);
-            ce.setRtspReliable(0);
-            ce.setIgnoreEmbeddedKLV(false);
-            // Not temporary: ATAK may prune temporary entries, and a pruned entry is
-            // indistinguishable from a broken stream from the operator's side.
-            ce.setTemporary(false);
-            setRawProtocol(ce);
-
+            final gov.tak.api.video.ConnectionEntry ce = buildEntry(c);
+            if (ce == null)
+                return;
             // Queued, not registered here. See flushVideoEntries().
             pendingEntries.add(ce);
-            videoUids.put(c.id, uid);
-            m.setMetaString("videoUID", uid);
+            videoUids.put(c.id, ce.getUID());
+            m.setMetaString("videoUID", ce.getUID());
             m.setMetaString("videoUrl", c.stream);
         } catch (LinkageError | RuntimeException e) {
             // Video is a bonus; a plugin must not fail to draw a camera over it.
             Log.w(TAG, "could not attach video for " + c.id, e);
+        }
+    }
+
+    /**
+     * The one shape of {@code ConnectionEntry} that actually plays these streams.
+     *
+     * <p>protocol=raw with the whole URL as the address, port -1.
+     *
+     * <p>This is the shape from the operator's working CoT, and it is confirmed
+     * playing on device. It was briefly "corrected" to let ATAK infer the protocol
+     * from the URL, on the theory that raw suited MJPEG and HLS needed HTTPS. That
+     * broke playback outright. The theory was wrong; raw is right for these too. Do
+     * not change it again without a camera that demonstrably fails under raw and
+     * plays under something else.
+     */
+    private gov.tak.api.video.ConnectionEntry buildEntry(Camera c) {
+        String uid = videoUids.get(c.id);
+        if (uid == null)
+            uid = java.util.UUID.randomUUID().toString();
+        final gov.tak.api.video.ConnectionEntry ce =
+                new gov.tak.api.video.ConnectionEntry(c.label(), c.stream);
+        ce.setUID(uid);
+        ce.setAddress(c.stream);
+        ce.setPort(-1);
+        ce.setPath("");
+        ce.setNetworkTimeout(12000);
+        ce.setBufferTime(-1);
+        ce.setRtspReliable(0);
+        ce.setIgnoreEmbeddedKLV(false);
+        // Not temporary: ATAK may prune temporary entries, and a pruned entry is
+        // indistinguishable from a broken stream from the operator's side.
+        ce.setTemporary(false);
+        setRawProtocol(ce);
+        return ce;
+    }
+
+    /**
+     * The registered, playable entry for a camera, for anything outside the radial.
+     *
+     * <p>The panel used to build its own with
+     * {@code StreamManagementUtils.createConnectionEntryFromUrl}, which splits the URL
+     * into host, port and path the ordinary way and lets ATAK infer the protocol. That
+     * is precisely the shape {@link #buildEntry} records as not playing. So the radial
+     * played a camera and the panel's own Live video button, on the same camera, did
+     * not -- two code paths that looked equivalent and were not. There is now one.
+     *
+     * <p>Registers immediately rather than queueing: the caller is about to hand the
+     * uid to the video player, and an entry the VideoManager does not hold yet reads
+     * to the operator as a broken stream.
+     *
+     * @return null when the camera has no stream, or registration failed
+     */
+    public gov.tak.api.video.ConnectionEntry videoEntry(Camera c) {
+        if (c == null || !c.hasStream())
+            return null;
+        try {
+            final String known = videoUids.get(c.id);
+            if (known != null) {
+                final gov.tak.api.video.ConnectionEntry held =
+                        com.atakmap.android.video.manager.VideoManager.getInstance()
+                                .getConnectionEntry(known);
+                if (held != null)
+                    return held;
+            }
+            final gov.tak.api.video.ConnectionEntry ce = buildEntry(c);
+            videoUids.put(c.id, ce.getUID());
+            com.atakmap.android.video.manager.VideoManager.getInstance()
+                    .addConnectionEntries(
+                            java.util.Collections.singletonList(ce), false);
+            return ce;
+        } catch (LinkageError | RuntimeException e) {
+            Log.w(TAG, "could not build a video entry for " + c.id, e);
+            return null;
         }
     }
 
@@ -1216,8 +1298,13 @@ public final class CameraLayer {
             final double limit = maxResolution == Double.MAX_VALUE
                     ? GOTO_RESOLUTION
                     : Math.min(GOTO_RESOLUTION, maxResolution * 0.5);
+            // Never zoom the operator back OUT to get to a camera. If they are
+            // already closer in than the arrival altitude, Go to is a pan and
+            // nothing else; pulling back to a fixed altitude would throw away the
+            // view they had deliberately set up.
+            final double target = Math.min(mapView.getMapResolution(), limit);
             mapView.getMapController().panZoomTo(
-                    p, mapView.mapResolutionAsMapScale(limit), true);
+                    p, mapView.mapResolutionAsMapScale(target), true);
         } catch (LinkageError | RuntimeException e) {
             Log.w(TAG, "panZoomTo failed; falling back to a plain pan", e);
             mapView.getMapController().panTo(p, true);
