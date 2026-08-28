@@ -1356,18 +1356,44 @@ public final class CamDepotPane implements CameraStore.Listener {
         return b.toString();
     }
 
-    /** Fetch the image filenames if we do not have them yet, then the JPEG. */
+    /** Ask for the camera's current frame, then fetch it. */
     private void loadImage(final Camera c, final ImageView into, final TextView info) {
+        // Live lookup first: the published shard is only as fresh as the last
+        // publisher run, and that is by hand. liveImageUrl falls back to the shard
+        // on its own when there is no proxy or the call fails.
+        store.liveImageUrl(c, new CameraStore.UrlCallback() {
+            @Override
+            public void onUrl(String url) {
+                if (url != null) {
+                    fetchInto(url, into, c.id);
+                    return;
+                }
+                loadImageFromShard(c, into, info);
+            }
+        });
+    }
+
+    /** Last resort: the state's images shard, which may not be loaded yet. */
+    private void loadImageFromShard(final Camera c, final ImageView into,
+            final TextView info) {
         final String url = store.imageUrl(c);
         if (url == null) {
             store.loadImages(currentState, new Runnable() {
                 @Override
                 public void run() {
                     final String u = store.imageUrl(c);
-                    if (u == null)
-                        info.append("\n(no image available)");
-                    else
+                    if (u == null) {
+                        // Say which of the two it is. "No image available" reads as
+                        // a broken camera on the 552 Maryland cameras that publish
+                        // live video and no still at all -- there is nothing wrong
+                        // with them, they simply never send a picture, and the
+                        // button that does work is right there.
+                        info.append(c.hasStream()
+                                ? "\nNo still from this camera \u2014 tap Live video"
+                                : "\nNo picture available from this camera");
+                    } else {
                         fetchInto(u, into, c.id);
+                    }
                 }
             });
             return;

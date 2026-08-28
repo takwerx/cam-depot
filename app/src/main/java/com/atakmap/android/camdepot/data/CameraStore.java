@@ -524,6 +524,62 @@ public final class CameraStore {
         });
     }
 
+    /** Handed a camera's current frame URL, or null when there is none. */
+    public interface UrlCallback {
+        void onUrl(String url);
+    }
+
+    /**
+     * The camera's current frame, asked for at the moment it is wanted.
+     *
+     * <p>{@link #imageUrl} builds a URL from the filename in the images shard, and
+     * that shard is only rewritten when the publisher runs -- by hand. So a picture
+     * was as old as the last publish: Idaho's cameras were serving frames 5.8 hours
+     * stale while the bearing on the very same marker was current to fifteen
+     * seconds. Caltrans never showed it because its own URL is carried in the
+     * catalog and always current; everything else, including every fire camera,
+     * depended on the shard.
+     *
+     * <p>So ask the live proxy, which already polls upstream every 15 s for the
+     * bearings. One small JSON lookup when a camera is opened; the image itself is
+     * still fetched straight from the CDN by the device, never through the proxy.
+     *
+     * <p>Falls back to the shard whenever the proxy is absent or fails -- a stale
+     * picture beats no picture, exactly as a stale bearing does.
+     */
+    public void liveImageUrl(final Camera c, final UrlCallback cb) {
+        if (c == null) {
+            cb.onUrl(null);
+            return;
+        }
+        // An agency that publishes its own current-frame URL needs none of this.
+        if (!c.still.isEmpty() || catalog == null || catalog.imageLive.isEmpty()) {
+            cb.onUrl(imageUrl(c));
+            return;
+        }
+        Http.get(catalog.imageLive + "?id=" + c.id, new Http.Callback() {
+            @Override
+            public void onSuccess(byte[] body) {
+                String url = null;
+                try {
+                    url = new JSONObject(text(body)).optString("url", "");
+                    if (url.isEmpty())
+                        url = null;
+                } catch (JSONException | UnsupportedEncodingException e) {
+                    Log.w(TAG, "live image lookup was not readable for " + c.id, e);
+                }
+                cb.onUrl(url != null ? url : imageUrl(c));
+            }
+
+            @Override
+            public void onFailure(String error) {
+                Log.w(TAG, "live image lookup failed for " + c.id + " (" + error
+                        + "); falling back to the published shard");
+                cb.onUrl(imageUrl(c));
+            }
+        });
+    }
+
     /**
      * Build the URL for a camera's current still.
      *

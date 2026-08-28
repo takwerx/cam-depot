@@ -56,6 +56,15 @@ public final class Catalog {
      * the map follows the camera. Empty means fall back to the R2 shard.
      */
     public final String dynamicBase;
+    /**
+     * Endpoint giving one camera's CURRENT frame URL, or empty.
+     *
+     * <p>The images shard is only as fresh as the last publisher run, which is by
+     * hand. That made every non-Caltrans picture hours old -- Idaho's were measured
+     * at 5.8 hours while the bearing on the same marker was fifteen seconds old.
+     * This asks the live proxy instead, and falls back to the shard when absent.
+     */
+    public final String imageLive;
     public final int totalCameras;
     public final List<State> states = new ArrayList<>();
     public final List<Provider> providers = new ArrayList<>();
@@ -68,6 +77,7 @@ public final class Catalog {
         generated = o.optString("generated", "");
         imageBase = o.optString("image_base", "");
         dynamicBase = o.optString("dynamic_base", "");
+        imageLive = o.optString("image_live", "");
         totalCameras = o.optJSONObject("counts") == null ? 0
                 : o.getJSONObject("counts").optInt("cameras", 0);
 
