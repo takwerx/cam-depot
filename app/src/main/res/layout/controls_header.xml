@@ -11,12 +11,30 @@
 
     <!-- First control in the panel, above Where, because it is the one filter that
          is not about where you are: it spans every state. -->
-    <Button
-        style="@style/TakwerxButton"
-        android:id="@+id/favorites"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp" />
+        android:orientation="horizontal"
+        android:baselineAligned="false"
+        android:layout_marginTop="4dp">
+
+        <Button
+            style="@style/TakwerxButton"
+            android:id="@+id/favorites"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content" />
+
+        <!-- Re-reads the catalog and reloads the state from scratch. The shards are
+             cached hard, so a catalog that changes under a running plugin was only
+             picked up by force-stopping ATAK. -->
+        <Button
+            style="@style/TakwerxButton"
+            android:id="@+id/resync"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/resync" />
+    </LinearLayout>
 
     <TextView
         android:layout_width="match_parent"

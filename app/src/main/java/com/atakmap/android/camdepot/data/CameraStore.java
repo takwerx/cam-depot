@@ -223,6 +223,21 @@ public final class CameraStore {
         byState.remove(state);
     }
 
+    /**
+     * Throw away everything and start from the catalog again.
+     *
+     * <p>The static shards are cached hard and keyed to the catalog's publish time,
+     * which is right until the published catalog changes underneath a running
+     * plugin -- a camera's video address moving, say. Nothing in a session ever
+     * re-read the catalog, so the only way to pick that up was to force-stop ATAK,
+     * which is not something to ask of an operator in the field.
+     */
+    public void reset() {
+        byState.clear();
+        seq.clear();
+        catalog = null;
+    }
+
     // ---- loading ----------------------------------------------------------
 
     public void loadCatalog() {

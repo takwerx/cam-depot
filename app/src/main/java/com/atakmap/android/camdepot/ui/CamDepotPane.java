@@ -386,6 +386,27 @@ public final class CamDepotPane implements CameraStore.Listener {
         liveOnly.setOnCheckedChangeListener(cc);
         stillOnly.setOnCheckedChangeListener(cc);
 
+        controls.findViewById(R.id.resync).setOnClickListener(
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        // Everything, from the catalog down.
+                        //
+                        // The shards are cached hard and keyed to the catalog's
+                        // publish time, which is correct until the catalog changes
+                        // under a running plugin -- a camera's video address moving,
+                        // an agency being added. Nothing re-read the catalog within a
+                        // session, so the only cure was to force-stop ATAK. That is
+                        // not something to ask of someone in the field, and it is the
+                        // first thing anyone tries when the panel looks wrong.
+                        busy("Re-syncing with the camera service\u2026");
+                        layer.clear();
+                        loadedAll = false;
+                        store.reset();
+                        store.loadCatalog();
+                    }
+                });
+
         favoritesButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
