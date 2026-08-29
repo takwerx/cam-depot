@@ -553,6 +553,20 @@ public final class CameraLayer {
      * plays under something else.
      */
     private gov.tak.api.video.ConnectionEntry buildEntry(Camera c) {
+        // https only, and checked here because this is where a catalog string stops
+        // being data and becomes an MRL that libVLC will dial.
+        //
+        // Http refuses a non-https request by design and CameraStore documents that
+        // as deliberate, but the video path never went through Http: the URL is
+        // handed to ATAK's player verbatim with protocol=RAW, so nothing parses or
+        // vets it. The catalog is built from ~25 third-party government APIs we do
+        // not control, and the publisher's liveness probe only establishes that a
+        // URL answers, not what scheme or host it is. Publisher-side validation is
+        // the first line; this is the one that matters on the device.
+        if (!isHttps(c.stream)) {
+            Log.w(TAG, "refusing a non-https stream for " + c.id);
+            return null;
+        }
         String uid = videoUids.get(c.id);
         if (uid == null)
             uid = java.util.UUID.randomUUID().toString();
@@ -571,6 +585,11 @@ public final class CameraLayer {
         ce.setTemporary(false);
         setRawProtocol(ce);
         return ce;
+    }
+
+    /** True only for an https URL. Nothing else is handed to the video player. */
+    private static boolean isHttps(String url) {
+        return url != null && url.regionMatches(true, 0, "https://", 0, 8);
     }
 
     /**

@@ -557,7 +557,15 @@ public final class CameraStore {
             cb.onUrl(imageUrl(c));
             return;
         }
-        Http.get(catalog.imageLive + "?id=" + c.id, new Http.Callback() {
+        // Encoded: the id comes from upstream, and an unencoded & or # in it would
+        // add or truncate a query parameter on our own endpoint.
+        String q;
+        try {
+            q = java.net.URLEncoder.encode(c.id, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            q = "";
+        }
+        Http.get(catalog.imageLive + "?id=" + q, new Http.Callback() {
             @Override
             public void onSuccess(byte[] body) {
                 String url = null;
