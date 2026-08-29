@@ -731,11 +731,58 @@ public final class CameraLayer {
         try {
             final Class<?> proto = Class.forName(
                     "gov.tak.api.video.ConnectionEntryBase$Protocol");
-            final Object raw = proto.getField("RAW").get(null);
-            gov.tak.api.video.ConnectionEntry.class
-                    .getMethod("setProtocol", proto).invoke(ce, raw);
+            Object raw = null;
+            // By field name first. Works on a development ATAK, where names survive.
+            try {
+                raw = proto.getField("RAW").get(null);
+            } catch (NoSuchFieldException obfuscated) {
+                raw = null;             // expected on official ATAK
+            }
+            // By toString(), which is a METHOD and therefore survives obfuscation
+            // where the constant's field name does not. The enum prints itself
+            // lowercase -- ATAK's own log line reads "protocol=raw".
+            if (raw == null) {
+                for (Object v : (Object[]) proto.getMethod("values").invoke(null)) {
+                    if ("raw".equalsIgnoreCase(String.valueOf(v))) {
+                        raw = v;
+                        break;
+                    }
+                }
+            }
+            // Last resort: RAW is the first constant in 5.6, 5.7 and 5.8, and
+            // obfuscation reorders nothing.
+            if (raw == null) {
+                final Object[] all = (Object[]) proto.getMethod("values").invoke(null);
+                if (all.length > 0)
+                    raw = all[0];
+            }
+            if (raw != null) {
+                gov.tak.api.video.ConnectionEntry.class
+                        .getMethod("setProtocol", proto).invoke(ce, raw);
+            }
         } catch (ReflectiveOperationException | RuntimeException e) {
             Log.w(TAG, "could not force RAW protocol; leaving " + ce.getProtocol(), e);
+        }
+
+        // Whatever happened above, leave a COHERENT entry.
+        //
+        // ATAK builds the MRL as protocol + "://" + address. With RAW it passes the
+        // address through, which is why the address is the whole URL. If the
+        // protocol is anything else, that same address produces
+        // "https://https://camdepot..." and the player fails instantly -- which is
+        // exactly what OFFICIAL ATAK 5.7 did, because looking the constant up by
+        // field name finds nothing once the build is obfuscated. It worked on the
+        // development device only because names survive there, which is precisely
+        // why a dev build cannot validate a release. Stripping the scheme here
+        // makes the reconstruction correct either way.
+        if (!"raw".equalsIgnoreCase(String.valueOf(ce.getProtocol()))) {
+            final String addr = ce.getAddress();
+            final int mark = addr == null ? -1 : addr.indexOf("://");
+            if (mark > 0) {
+                Log.w(TAG, "RAW unavailable; handing " + ce.getProtocol()
+                        + " a scheme-less address so the URL is not doubled");
+                ce.setAddress(addr.substring(mark + 3));
+            }
         }
     }
 
