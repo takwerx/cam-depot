@@ -70,14 +70,35 @@
         android:paddingTop="6dp"
         android:alpha="0.6" />
 
-    <EditText
-        android:id="@+id/search"
+    <!-- Clear sits beside the box rather than being an X inside it, and it is
+         disabled while the box is empty. That makes it the indicator as well as the
+         control: a live Clear button is the panel saying a search is filtering the
+         list. An operator lost time to a search left in the box from earlier, with
+         nothing on screen to say so. -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="@string/search_hint"
-        android:inputType="text"
-        android:maxLines="1"
-        android:textSize="14sp" />
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <EditText
+            android:id="@+id/search"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:hint="@string/search_hint"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textSize="14sp" />
+
+        <Button
+            style="@style/TakwerxButton"
+            android:id="@+id/search_clear"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:text="@string/clear" />
+    </LinearLayout>
 
     <TextView
         android:layout_width="match_parent"

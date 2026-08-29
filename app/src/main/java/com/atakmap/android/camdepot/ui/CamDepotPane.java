@@ -98,6 +98,15 @@ public final class CamDepotPane implements CameraStore.Listener {
      */
     private final Button favoritesButton;
     private final EditText search;
+    /**
+     * Clears the search box, and is disabled while it is empty.
+     *
+     * <p>So it is the indicator as much as the control: a live Clear button is the
+     * only thing on the panel that says a search is narrowing the list. An operator
+     * lost time to a search left in the box from earlier and had to open the
+     * keyboard to find out.
+     */
+    private final Button searchClear;
     private final CheckBox fireOnly, liveOnly, stillOnly;
     /**
      * Narrows the list to the map's current extent, and follows it.
@@ -221,6 +230,7 @@ public final class CamDepotPane implements CameraStore.Listener {
         providerButton = controls.findViewById(R.id.provider);
         countyButton = controls.findViewById(R.id.county);
         search = controls.findViewById(R.id.search);
+        searchClear = controls.findViewById(R.id.search_clear);
         inView = controls.findViewById(R.id.in_view);
         fireOnly = controls.findViewById(R.id.fire_only);
         liveOnly = controls.findViewById(R.id.live_only);
@@ -238,6 +248,10 @@ public final class CamDepotPane implements CameraStore.Listener {
 
         adapter = new CameraAdapter();
         list.setAdapter(adapter);
+
+        // Before wire(), so restoring a checkbox does not fire its own listener and
+        // run apply() against a panel that is not built yet.
+        restoreUi();
 
         wire();
         updateFavoritesButton();
@@ -324,6 +338,7 @@ public final class CamDepotPane implements CameraStore.Listener {
 
             @Override
             public void afterTextChanged(Editable e) {
+                searchClear.setEnabled(search.getText().length() > 0);
                 if (search.getText().length() > 0 && !loadedAll) {
                     loadedAll = true;
                     busy("Building the camera list for every state…");
@@ -338,6 +353,26 @@ public final class CamDepotPane implements CameraStore.Listener {
             }
         };
         search.addTextChangedListener(tw);
+        searchClear.setEnabled(search.getText().length() > 0);
+        searchClear.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                search.setText("");
+                // Put the keyboard away too. Clearing a search and then having to
+                // dismiss a keyboard by hand is half a fix.
+                try {
+                    final android.view.inputmethod.InputMethodManager imm =
+                            (android.view.inputmethod.InputMethodManager)
+                                    mapView.getContext().getSystemService(
+                                            Context.INPUT_METHOD_SERVICE);
+                    if (imm != null)
+                        imm.hideSoftInputFromWindow(search.getWindowToken(), 0);
+                } catch (RuntimeException ignored) {
+                    // The list is cleared either way; the keyboard is a courtesy.
+                }
+                search.clearFocus();
+            }
+        });
 
         final CompoundButton.OnCheckedChangeListener cc =
                 new CompoundButton.OnCheckedChangeListener() {
@@ -521,6 +556,25 @@ public final class CamDepotPane implements CameraStore.Listener {
      */
     static final String ALWAYS = "Always draw them";
     static final String PREF_ZOOM = "camdepot_zoom_threshold";
+    /**
+     * What the panel looked like last time, so opening the plugin does not mean
+     * setting it all up again.
+     *
+     * <p>The search box and the radius are deliberately NOT among these. Both are
+     * per-task rather than per-operator: coming back to a search you typed
+     * yesterday, or to a radius measured from where you were standing then, is a
+     * filter you did not choose and would have to notice before you could clear it.
+     * Everything here is a standing preference -- where you work and what you care
+     * to see.
+     */
+    private static final String PREF_STATE = "camdepot_state";
+    private static final String PREF_PROVIDER = "camdepot_provider";
+    private static final String PREF_COUNTY = "camdepot_county";
+    private static final String PREF_FIRE = "camdepot_fire_only";
+    private static final String PREF_VIDEO = "camdepot_video_only";
+    private static final String PREF_STILL = "camdepot_still_only";
+    private static final String PREF_FAV_FIRST = "camdepot_favorites_first";
+    private static final String PREF_IN_VIEW = "camdepot_in_view";
 
     /**
      * Starting points, expressed as what the scale bar would read — the same
@@ -572,6 +626,83 @@ public final class CamDepotPane implements CameraStore.Listener {
         }
         updateZoomLabel();
         apply();
+    }
+
+    private android.content.SharedPreferences prefs() {
+        try {
+            return android.preference.PreferenceManager
+                    .getDefaultSharedPreferences(mapView.getContext());
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** Put the panel back the way it was left. */
+    private void restoreUi() {
+        final android.content.SharedPreferences p = prefs();
+        if (p == null)
+            return;
+        try {
+            currentState = p.getString(PREF_STATE, currentState);
+            final String pr = p.getString(PREF_PROVIDER, "");
+            final String co = p.getString(PREF_COUNTY, "");
+            // Empty means "all", which is what null means to the filters. These are
+            // validated again in onCameras once the state is loaded, so a provider
+            // that no longer exists here quietly falls back to all rather than
+            // matching nothing.
+            selectedProvider = pr.isEmpty() ? null : pr;
+            selectedCounty = co.isEmpty() ? null : co;
+            fireOnly.setChecked(p.getBoolean(PREF_FIRE, false));
+            liveOnly.setChecked(p.getBoolean(PREF_VIDEO, false));
+            stillOnly.setChecked(p.getBoolean(PREF_STILL, false));
+            inView.setChecked(p.getBoolean(PREF_IN_VIEW, false));
+            favoritesFirst = p.getBoolean(PREF_FAV_FIRST, false);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "could not restore the panel; starting fresh", e);
+        }
+    }
+
+    /** The panel's current shape, as one string, so a write only happens on change. */
+    private String uiSignature() {
+        return currentState + "|" + (selectedProvider == null ? "" : selectedProvider)
+                + "|" + (selectedCounty == null ? "" : selectedCounty)
+                + "|" + fireOnly.isChecked() + liveOnly.isChecked()
+                + stillOnly.isChecked() + inView.isChecked() + favoritesFirst;
+    }
+
+    private String savedUi = "";
+
+    /**
+     * Remember the panel, but only when it actually changed.
+     *
+     * <p>apply() runs on every live refresh, which is every few seconds; writing
+     * preferences on that cadence would be a disk write for nothing nearly every
+     * time. Comparing a short signature first makes it a write per operator action.
+     */
+    private void rememberUi() {
+        final String now = uiSignature();
+        if (now.equals(savedUi))
+            return;
+        savedUi = now;
+        final android.content.SharedPreferences p = prefs();
+        if (p == null)
+            return;
+        try {
+            p.edit()
+                    .putString(PREF_STATE, currentState)
+                    .putString(PREF_PROVIDER,
+                            selectedProvider == null ? "" : selectedProvider)
+                    .putString(PREF_COUNTY,
+                            selectedCounty == null ? "" : selectedCounty)
+                    .putBoolean(PREF_FIRE, fireOnly.isChecked())
+                    .putBoolean(PREF_VIDEO, liveOnly.isChecked())
+                    .putBoolean(PREF_STILL, stillOnly.isChecked())
+                    .putBoolean(PREF_IN_VIEW, inView.isChecked())
+                    .putBoolean(PREF_FAV_FIRST, favoritesFirst)
+                    .apply();
+        } catch (RuntimeException e) {
+            Log.w(TAG, "could not remember the panel", e);
+        }
     }
 
     /** Restore the operator's threshold, or a sensible default on first run. */
@@ -723,8 +854,8 @@ public final class CamDepotPane implements CameraStore.Listener {
 
 
         stateButton.setText(currentState);
-        providerButton.setText(ALL);
-        countyButton.setText(ALL_COUNTIES);
+        providerButton.setText(selectedProvider == null ? ALL : selectedProvider);
+        countyButton.setText(selectedCounty == null ? ALL_COUNTIES : selectedCounty);
 
         status.setText(String.format(Locale.US, "%,d cameras, %d states — %s",
                 catalog.totalCameras, catalog.states.size(), catalog.generated));
@@ -939,6 +1070,8 @@ public final class CamDepotPane implements CameraStore.Listener {
         drawn.addAll(out);
         layer.show(drawn);
 
+        rememberUi();
+
         lastFavorites = favs.size();
         lastMatched = out.size();
         lastTotal = all.size();
@@ -998,6 +1131,12 @@ public final class CamDepotPane implements CameraStore.Listener {
         final StringBuilder msg = new StringBuilder();
         msg.append(String.format(Locale.US, "%,d of %,d %s cameras up and matching",
                 lastMatched, lastTotal, currentState));
+        // Name the search in the status line. The list being short because of a
+        // filter the operator forgot is exactly the confusion this panel is supposed
+        // to prevent, and the box itself is easy to scroll past.
+        final String q = search.getText().toString().trim();
+        if (!q.isEmpty())
+            msg.append(String.format(Locale.US, "  \u00b7  search: \u201c%s\u201d", q));
         if (favoritesFirst) {
             // A favorites list that is quietly shorter than its own count reads as
             // favorites having been lost.
