@@ -1388,44 +1388,33 @@ public final class CamDepotPane implements CameraStore.Listener {
      * rather than argued about: if it fails, the fix is an MJPEG endpoint on our
      * proxy that re-fetches the still, which is what the previous developer built.
      */
+    /**
+     * Play a camera, through the one entry the layer builds.
+     *
+     * <p>There used to be a fallback here that built a second ConnectionEntry with
+     * {@code StreamManagementUtils.createConnectionEntryFromUrl}. It is gone, for
+     * three reasons that all point the same way. It could not work: that shape is
+     * the one CameraLayer records as not playing, which is why video played from
+     * the radial and not from this button. It could not be reached: the video
+     * control is hidden on a camera with no stream. And it could not be compiled
+     * against every ATAK the fleet runs -- the method returns
+     * {@code com.atakmap.android.video.ConnectionEntry} on 5.6 and
+     * {@code gov.tak.api.video.ConnectionEntry} on 5.8, so it breaks a build for
+     * an older target, which is exactly what a submission has to produce.
+     */
     private void playVideo(Camera c) {
-        if (c.hasStream()) {
-            // A real HLS stream. This is the only case ATAK's player can actually
-            // render; everything else in the catalog is a single JPEG.
-            launchVideo(c, c.stream);
-            return;
-        }
-        final String url = store.imageUrl(c);
-        if (url == null) {
-            store.loadImages(currentState, new Runnable() {
-                @Override
-                public void run() {
-                    final String u = store.imageUrl(c);
-                    if (u == null)
-                        toast("No image URL for this camera yet");
-                    else
-                        launchVideo(c, u);
-                }
-            });
-            return;
-        }
-        launchVideo(c, url);
+        launchVideo(c);
     }
 
-    private void launchVideo(Camera c, String url) {
+    private void launchVideo(Camera c) {
         try {
-            // A camera that streams gets the layer's entry: raw protocol, whole URL
-            // as the address. That is the shape confirmed playing on device, and it
-            // is the one the radial menu hands the player. Building a second one here
-            // out of the same URL produced an entry that looked right and did not
-            // play, so the same camera worked from the radial and not from this
-            // button. Stills fall back to the ordinary parse, which is all they need.
-            gov.tak.api.video.ConnectionEntry ce = layer.videoEntry(c);
-            if (ce == null)
-                ce = com.atakmap.android.video.StreamManagementUtils
-                        .createConnectionEntryFromUrl(c.label(), url);
+            // Raw protocol, whole URL as the address -- the shape confirmed playing
+            // on device, and the one the radial menu hands the player. videoEntry
+            // returns null for a camera with no stream, or one whose published URL
+            // is not https.
+            final gov.tak.api.video.ConnectionEntry ce = layer.videoEntry(c);
             if (ce == null) {
-                toast("ATAK would not accept that URL");
+                toast("This camera has no playable stream");
                 return;
             }
             // Hand the player an EMPTY right-hand slot, then broadcast.
@@ -1448,11 +1437,10 @@ public final class CamDepotPane implements CameraStore.Listener {
             if (detailHost != null) {
                 detailHost.keepListClosedOnce();
                 detailHost.hideDetailPane();
-                final gov.tak.api.video.ConnectionEntry entry = ce;
                 handler.postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        broadcastVideo(c, entry);
+                        broadcastVideo(c, ce);
                     }
                 }, 250);
                 return;
