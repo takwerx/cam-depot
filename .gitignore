@@ -37,3 +37,8 @@ captures/
 # Submission zips
 dist/
 *.zip
+
+# The user manual is BUILT, not committed. gradle/typst.gradle compiles
+# docs/user_manual/ into here when ATAK_CI=1, and tak.gov builds its own from
+# the typst source in the submission zip.
+app/src/main/assets/usermanual.pdf

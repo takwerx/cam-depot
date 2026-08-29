@@ -32,6 +32,8 @@ public class CamDepot implements IPlugin {
     private static final String TAG = "CamDepot";
 
     static final String PREF_BASE_URL = "camdepot_base_url";
+    /** Key for the plugin's entry in ATAK's Tool Preferences. */
+    private static final String PREFS_KEY = "camdepotPreference";
     static final String DEFAULT_BASE_URL = "https://mapdepot.takwerx.org/camdepot";
 
     IServiceController serviceController;
@@ -95,10 +97,49 @@ public class CamDepot implements IPlugin {
         if (uiService == null)
             return;
         uiService.addToolbarItem(toolbarItem);
+        registerPreferences();
+    }
+
+    /**
+     * Put the plugin in ATAK's Tool Preferences, which is the only way an operator
+     * can reach the user manual.
+     *
+     * <p>The manual is compiled into {@code assets/usermanual.pdf}, and an asset is
+     * not reachable by anyone -- without this entry it ships inside the APK with no
+     * way to open it. That has already happened once in this repo, undetected,
+     * because the PDF genuinely was in the APK.
+     *
+     * <p>Guarded rather than assumed: a build that does not expose
+     * {@code ToolsPreferenceFragment} should cost the manual, not the plugin.
+     */
+    private void registerPreferences() {
+        try {
+            com.atakmap.app.preferences.ToolsPreferenceFragment.register(
+                    new com.atakmap.app.preferences.ToolsPreferenceFragment
+                            .ToolPreference(
+                            pluginContext.getString(R.string.app_name),
+                            pluginContext.getString(R.string.prefs_summary),
+                            PREFS_KEY,
+                            pluginContext.getResources().getDrawable(
+                                    R.drawable.ic_launcher),
+                            new CamDepotPreferenceFragment(pluginContext)));
+        } catch (LinkageError | RuntimeException notThisBuild) {
+            Log.w(TAG, "could not register preferences: " + notThisBuild);
+        }
+    }
+
+    private void unregisterPreferences() {
+        try {
+            com.atakmap.app.preferences.ToolsPreferenceFragment
+                    .unregister(PREFS_KEY);
+        } catch (LinkageError | RuntimeException notThisBuild) {
+            Log.w(TAG, "could not unregister preferences: " + notThisBuild);
+        }
     }
 
     @Override
     public void onStop() {
+        unregisterPreferences();
         if (uiService == null)
             return;
         uiService.removeToolbarItem(toolbarItem);
