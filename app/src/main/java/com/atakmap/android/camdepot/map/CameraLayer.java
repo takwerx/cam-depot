@@ -729,52 +729,51 @@ public final class CameraLayer {
      */
     private static void setRawProtocol(gov.tak.api.video.ConnectionEntry ce) {
         try {
-            final Class<?> proto = Class.forName(
-                    "gov.tak.api.video.ConnectionEntryBase$Protocol");
-            Object raw = null;
-            // By field name first. Works on a development ATAK, where names survive.
-            try {
-                raw = proto.getField("RAW").get(null);
-            } catch (NoSuchFieldException obfuscated) {
-                raw = null;             // expected on official ATAK
-            }
-            // By toString(), which is a METHOD and therefore survives obfuscation
-            // where the constant's field name does not. The enum prints itself
-            // lowercase -- ATAK's own log line reads "protocol=raw".
-            if (raw == null) {
-                for (Object v : (Object[]) proto.getMethod("values").invoke(null)) {
-                    if ("raw".equalsIgnoreCase(String.valueOf(v))) {
-                        raw = v;
-                        break;
-                    }
+            // Find the setter by NAME, and take the enum type from its own
+            // parameter. Never name the enum class.
+            //
+            // Class.forName("gov.tak.api.video.ConnectionEntryBase$Protocol") is
+            // wrong on an obfuscated build: ATAK 5.6 renames that enum to
+            // gov.tak.api.video.a$b, so the lookup either misses or resolves to a
+            // class that does not match setProtocol's signature --
+            // "NoSuchMethodException: ConnectionEntry.setProtocol [class
+            // gov.tak.api.video.a$b]" on the tak.gov build. Asking the method what
+            // it takes cannot be wrong, whatever the obfuscator renamed.
+            java.lang.reflect.Method setter = null;
+            for (java.lang.reflect.Method m
+                    : gov.tak.api.video.ConnectionEntry.class.getMethods()) {
+                if ("setProtocol".equals(m.getName())
+                        && m.getParameterTypes().length == 1) {
+                    setter = m;
+                    break;
                 }
             }
-            // Last resort: RAW is the first constant in 5.6, 5.7 and 5.8, and
-            // obfuscation reorders nothing.
-            if (raw == null) {
-                final Object[] all = (Object[]) proto.getMethod("values").invoke(null);
-                if (all.length > 0)
-                    raw = all[0];
-            }
-            if (raw != null) {
-                gov.tak.api.video.ConnectionEntry.class
-                        .getMethod("setProtocol", proto).invoke(ce, raw);
+            if (setter != null) {
+                final Class<?> proto = setter.getParameterTypes()[0];
+                final Object[] all = proto.getEnumConstants();
+                Object raw = null;
+                if (all != null) {
+                    // toString survives obfuscation where the constant name does
+                    // not; the enum prints itself lowercase.
+                    for (Object v : all) {
+                        if ("raw".equalsIgnoreCase(String.valueOf(v))) {
+                            raw = v;
+                            break;
+                        }
+                    }
+                    if (raw == null && all.length > 0)
+                        raw = all[0];   // RAW is first in 5.6, 5.7 and 5.8
+                }
+                if (raw != null)
+                    setter.invoke(ce, raw);
             }
         } catch (ReflectiveOperationException | RuntimeException e) {
             Log.w(TAG, "could not force RAW protocol; leaving " + ce.getProtocol(), e);
         }
 
-        // Whatever happened above, leave a COHERENT entry.
-        //
-        // ATAK builds the MRL as protocol + "://" + address. With RAW it passes the
-        // address through, which is why the address is the whole URL. If the
-        // protocol is anything else, that same address produces
-        // "https://https://camdepot..." and the player fails instantly -- which is
-        // exactly what OFFICIAL ATAK 5.7 did, because looking the constant up by
-        // field name finds nothing once the build is obfuscated. It worked on the
-        // development device only because names survive there, which is precisely
-        // why a dev build cannot validate a release. Stripping the scheme here
-        // makes the reconstruction correct either way.
+        // Whatever happened above, leave a COHERENT entry: ATAK builds the MRL as
+        // protocol + "://" + address, so an address that is already a full URL
+        // doubles the scheme when the protocol is not raw.
         if (!"raw".equalsIgnoreCase(String.valueOf(ce.getProtocol()))) {
             final String addr = ce.getAddress();
             final int mark = addr == null ? -1 : addr.indexOf("://");

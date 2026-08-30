@@ -49,7 +49,7 @@ source submission zip).
 _________________________________________________________________
 STATUS
 
-Release candidate. Version 0.3.
+Release candidate. Version 0.4.
 
 Exercised on hardware: Samsung Galaxy XCover Pro (ATAK-CIV 5.8.0.3). Panel,
 filters, favorites, camera imagery, live video, bearing lines and the zoom
