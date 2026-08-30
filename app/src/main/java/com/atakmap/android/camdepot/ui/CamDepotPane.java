@@ -1612,7 +1612,7 @@ public final class CamDepotPane implements CameraStore.Listener {
             @Override
             public void onUrl(String url) {
                 if (url != null) {
-                    fetchInto(url, into, c.id);
+                    fetchInto(url, into, c.id, info);
                     return;
                 }
                 loadImageFromShard(c, into, info);
@@ -1639,13 +1639,13 @@ public final class CamDepotPane implements CameraStore.Listener {
                                 ? "\nNo still from this camera \u2014 tap Live video"
                                 : "\nNo picture available from this camera");
                     } else {
-                        fetchInto(u, into, c.id);
+                        fetchInto(u, into, c.id, info);
                     }
                 }
             });
             return;
         }
-        fetchInto(url, into, c.id);
+        fetchInto(url, into, c.id, info);
     }
 
     /**
@@ -1686,12 +1686,33 @@ public final class CamDepotPane implements CameraStore.Listener {
      *            land in a pane the operator has already moved on from
      */
     private void fetchInto(String url, final ImageView into, final String key) {
+        fetchInto(url, into, key, null);
+    }
+
+    /**
+     * @param info where to say what went wrong, or null
+     *
+     * <p>A blank pane used to be the outcome of three different things -- a failed
+     * fetch, a decode that returned null, and a camera that simply had no picture --
+     * and none of them said so. An operator reported a black pane on Georgia and
+     * there was nothing in the log to tell the three apart, because a fetch that
+     * succeeds is silent and a null decode returned without a word. The panel says
+     * what it is not showing everywhere else; this is the one place it did not.
+     */
+    private void fetchInto(String url, final ImageView into, final String key,
+            final TextView info) {
         if (key != null) {
             into.setTag(key);
             final Bitmap had = frames.get(key);
             if (had != null)
                 into.setImageBitmap(had);   // something to look at while we fetch
         }
+        // Say it is working. A camera can take five seconds to answer -- SAV-0038
+        // on the Georgia network does -- and a pane that sits blank for five
+        // seconds reads as broken, which is how a slow camera got reported as a
+        // black screen. The line is removed the moment the picture lands.
+        final CharSequence base = info == null ? null : info.getText();
+        say(info, "\nFetching the latest picture\u2026");
         Http.get(url, new Http.Callback() {
             @Override
             public void onSuccess(final byte[] body) {
@@ -1704,15 +1725,24 @@ public final class CamDepotPane implements CameraStore.Listener {
                         o.inSampleSize = 2;
                         final Bitmap bm = BitmapFactory.decodeByteArray(
                                 body, 0, body.length, o);
-                        if (bm == null)
+                        if (bm == null) {
+                            Log.w(TAG, "image did not decode for " + key + " ("
+                                    + body.length + " bytes)");
+                            restore(info, base);
+                            say(info, "\nThe agency sent something this could not "
+                                    + "display");
                             return;
+                        }
                         if (key != null)
                             frames.put(key, bm);
                         handler.post(new Runnable() {
                             @Override
                             public void run() {
-                                if (key == null || key.equals(into.getTag()))
-                                    into.setImageBitmap(bm);
+                                if (key != null && !key.equals(into.getTag()))
+                                    return;     // the operator moved on
+                                into.setImageBitmap(bm);
+                                if (info != null && base != null)
+                                    info.setText(base);
                             }
                         });
                     }
@@ -1722,6 +1752,32 @@ public final class CamDepotPane implements CameraStore.Listener {
             @Override
             public void onFailure(String error) {
                 Log.w(TAG, "image fetch failed: " + error);
+                restore(info, base);
+                say(info, "\nCould not reach this camera's picture");
+            }
+        });
+    }
+
+    /** Put the detail text back as it was, dropping any progress line. */
+    private void restore(final TextView info, final CharSequence base) {
+        if (info == null || base == null)
+            return;
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                info.setText(base);
+            }
+        });
+    }
+
+    /** Append a line to the detail text, on the main thread, if there is one. */
+    private void say(final TextView info, final String line) {
+        if (info == null)
+            return;
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                info.append(line);
             }
         });
     }
