@@ -16,7 +16,7 @@
     <string name="all_counties">All counties</string>
     <string name="favorite">Favorite</string>
     <string name="clear">Clear</string>
-    <string name="resync">Re-sync</string>
+    <string name="resync">Sync</string>
     <string name="manual_title">Plugin Documentation</string>
     <string name="manual_summary">Open the Cam Depot user guide: finding cameras, favorites, live video, and what the bearing line means</string>
     <string name="prefs_summary">Public camera networks on the map</string>

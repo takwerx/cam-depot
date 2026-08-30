@@ -192,8 +192,8 @@ public class CamDepot implements IPlugin {
                     }
                     final Pane opened = new PaneBuilder(v)
                             .setMetaValue(Pane.RELATIVE_LOCATION, Pane.Location.Default)
-                            .setMetaValue(Pane.PREFERRED_WIDTH_RATIO, 0.45D)
-                            .setMetaValue(Pane.PREFERRED_HEIGHT_RATIO, 0.85D)
+                            .setMetaValue(Pane.PREFERRED_WIDTH_RATIO, 0.5D)
+                            .setMetaValue(Pane.PREFERRED_HEIGHT_RATIO, 0.5D)
                             .build();
                     detailPane = opened;
                     keepListClosedOnce = false;
@@ -243,8 +243,15 @@ public class CamDepot implements IPlugin {
             // expects a tool pane to be.
             pane = new PaneBuilder(content.getView())
                     .setMetaValue(Pane.RELATIVE_LOCATION, Pane.Location.Default)
-                    .setMetaValue(Pane.PREFERRED_WIDTH_RATIO, 0.45D)
-                    .setMetaValue(Pane.PREFERRED_HEIGHT_RATIO, 0.85D)
+                    // 0.5 / 0.5, the same as PLSS, Map Depot and Traffic.
+                    //
+                    // This was 0.45 / 0.85, which looks fine in landscape because the
+                    // WIDTH ratio governs there. In portrait the height ratio governs
+                    // and the panel took 85% of the screen, leaving a sliver of map.
+                    // The other plugins never showed it because they were 0.5 / 0.5
+                    // all along.
+                    .setMetaValue(Pane.PREFERRED_WIDTH_RATIO, 0.5D)
+                    .setMetaValue(Pane.PREFERRED_HEIGHT_RATIO, 0.5D)
                     .build();
         }
         if (!uiService.isPaneVisible(pane))

@@ -399,7 +399,7 @@ public final class CamDepotPane implements CameraStore.Listener {
                         // session, so the only cure was to force-stop ATAK. That is
                         // not something to ask of someone in the field, and it is the
                         // first thing anyone tries when the panel looks wrong.
-                        busy("Re-syncing with the camera service\u2026");
+                        busy("Syncing with the camera service\u2026");
                         layer.clear();
                         loadedAll = false;
                         store.reset();

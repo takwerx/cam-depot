@@ -272,9 +272,29 @@ public final class CameraStore {
         });
     }
 
-    /** Fetch a state's static cameras, then immediately its dynamic half. */
+    /**
+     * Fetch a state's static cameras, show them, then fetch its dynamic half.
+     *
+     * <p>The order matters and it was wrong. A state used to become visible only
+     * when the DYNAMIC refresh returned rows, because that is where onCameras was
+     * called from. That held while every camera came from ALERT West, which
+     * publishes a bearing for all of them. It stopped holding the moment the
+     * catalog gained sources that have no live feed at all -- the 511 network,
+     * CARS, Tennessee, DriveBC, Maryland.
+     *
+     * <p>For those, an empty delta is the correct answer, not a failure. But the
+     * refresh treated empty as "nothing to say" and returned without telling the
+     * UI anything, so 14 states and 11,736 cameras -- Georgia, Pennsylvania, North
+     * Carolina, Tennessee, Maryland among them -- loaded fully into memory and
+     * rendered as an empty list. Nearly a third of the catalog, invisible.
+     *
+     * <p>Now the static half is delivered as soon as it parses. That is what the
+     * list is made of; the live feed is an enhancement laid on top, and a state
+     * with no live data is simply a state whose cameras do not move.
+     */
     public void loadState(final String state) {
         if (byState.containsKey(state)) {
+            deliver(state);             // already have it; show it, then refresh
             refreshState(state);
             return;
         }
@@ -300,6 +320,9 @@ public final class CameraStore {
                                     return;
                                 }
                                 Log.d(TAG, "loaded " + count + " cameras for " + state);
+                                // Show it now. Do not wait for a live feed that may
+                                // have nothing to say about this state.
+                                deliver(state);
                                 refreshState(state);
                             }
                         });
@@ -312,6 +335,13 @@ public final class CameraStore {
                 listener.onError(state + ": " + error);
             }
         });
+    }
+
+    /** Hand a state's cameras to the panel, whatever the live feed has to say. */
+    private void deliver(String state) {
+        final Map<String, Camera> m = byState.get(state);
+        if (m != null)
+            listener.onCameras(state, new ArrayList<>(m.values()));
     }
 
     private int parseStatic(String state, String json) throws JSONException {
