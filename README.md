@@ -78,7 +78,7 @@ PORTS REQUIRED
   camera whose published stream or image URL is not HTTPS is rejected rather
   than offered.
 
-  Live video is served over HTTPS on TCP 8090 for the wildfire networks, because
+  Live video is served over HTTPS on TCP 10443 for the wildfire networks, because
   ATAK's player cannot read a multipart stream over HTTP/2 and that listener is
   HTTP/1.1 only. Agency-hosted streams are HTTPS on TCP 443.
 
