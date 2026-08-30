@@ -1575,9 +1575,21 @@ public final class CamDepotPane implements CameraStore.Listener {
     /** The broadcast itself, once the pane slot is clear. */
     private void broadcastVideo(Camera c, gov.tak.api.video.ConnectionEntry ce) {
         try {
+            // Send the UID and let ATAK fetch its own entry -- exactly what the
+            // radial does.
+            //
+            // ATAK's own actions/video.xml broadcasts videoUID and videoUrl as
+            // STRINGS and never passes an entry. We were passing the whole
+            // ConnectionEntry as a Parcelable, and on ATAK 5.6 that does not
+            // survive the Intent round-trip: the radial played a camera while the
+            // pane failed the same camera with "invalid video format", because the
+            // entry ATAK holds in memory was fine and the one it unparcelled was
+            // not. Sending the uid means both paths hand the player the identical
+            // object -- the one VideoManager already holds.
             final android.content.Intent i =
                     new android.content.Intent("com.atakmap.maps.video.DISPLAY");
-            i.putExtra("CONNECTION_ENTRY", ce);
+            i.putExtra("videoUID", ce.getUID());
+            i.putExtra("videoUrl", ce.getAddress());
             i.putExtra("cancelClose", "true");
             com.atakmap.android.ipc.AtakBroadcast.getInstance().sendBroadcast(i);
         } catch (LinkageError | RuntimeException e) {
