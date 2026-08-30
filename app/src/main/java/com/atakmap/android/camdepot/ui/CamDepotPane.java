@@ -149,7 +149,18 @@ public final class CamDepotPane implements CameraStore.Listener {
     private final List<String> providerNames = new ArrayList<>();
     private final List<String> countyNames = new ArrayList<>();
     /** null means "all". */
-    private String selectedProvider, selectedCounty;
+    private String selectedProvider;
+    /**
+     * The counties in play. Empty means every county in the state.
+     *
+     * <p>A set rather than one value because an operating area is rarely one
+     * county: a fire runs across three, a district covers five. Picking them one
+     * at a time meant filtering to a county, looking, then filtering to the next
+     * and losing the first -- so the panel could never show the area an operator
+     * was actually working.
+     */
+    private final java.util.Set<String> selectedCounties =
+            new java.util.LinkedHashSet<>();
     /** Radius in the operator's own unit (miles / km / NM). 0 means no filter. */
     private double radiusBig = 0;
     private GeoPoint center;                  // null means "use my location"
@@ -439,7 +450,7 @@ public final class CamDepotPane implements CameraStore.Listener {
                         if (value.equals(currentState) && store.isLoaded(value))
                             return;
                         currentState = value;
-                        selectedCounty = null;
+                        selectedCounties.clear();
                         layer.clear();
                         stateButton.setText(value);
                         countyButton.setText("All counties");
@@ -476,14 +487,7 @@ public final class CamDepotPane implements CameraStore.Listener {
         countyButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                choose("County", countyNames, selectedCounty, new Chosen() {
-                    @Override
-                    public void onChosen(String value) {
-                        selectedCounty = ALL_COUNTIES.equals(value) ? null : value;
-                        countyButton.setText(value);
-                        apply();
-                    }
-                });
+                chooseCounties();
             }
         });
 
@@ -672,7 +676,11 @@ public final class CamDepotPane implements CameraStore.Listener {
             // that no longer exists here quietly falls back to all rather than
             // matching nothing.
             selectedProvider = pr.isEmpty() ? null : pr;
-            selectedCounty = co.isEmpty() ? null : co;
+            selectedCounties.clear();
+            for (String one : co.split("\u001f")) {
+                if (!one.isEmpty())
+                    selectedCounties.add(one);
+            }
             fireOnly.setChecked(p.getBoolean(PREF_FIRE, false));
             liveOnly.setChecked(p.getBoolean(PREF_VIDEO, false));
             stillOnly.setChecked(p.getBoolean(PREF_STILL, false));
@@ -686,7 +694,7 @@ public final class CamDepotPane implements CameraStore.Listener {
     /** The panel's current shape, as one string, so a write only happens on change. */
     private String uiSignature() {
         return currentState + "|" + (selectedProvider == null ? "" : selectedProvider)
-                + "|" + (selectedCounty == null ? "" : selectedCounty)
+                + "|" + joinCounties()
                 + "|" + fireOnly.isChecked() + liveOnly.isChecked()
                 + stillOnly.isChecked() + inView.isChecked() + favoritesFirst;
     }
@@ -713,8 +721,7 @@ public final class CamDepotPane implements CameraStore.Listener {
                     .putString(PREF_STATE, currentState)
                     .putString(PREF_PROVIDER,
                             selectedProvider == null ? "" : selectedProvider)
-                    .putString(PREF_COUNTY,
-                            selectedCounty == null ? "" : selectedCounty)
+                    .putString(PREF_COUNTY, joinCounties())
                     .putBoolean(PREF_FIRE, fireOnly.isChecked())
                     .putBoolean(PREF_VIDEO, liveOnly.isChecked())
                     .putBoolean(PREF_STILL, stillOnly.isChecked())
@@ -876,7 +883,7 @@ public final class CamDepotPane implements CameraStore.Listener {
 
         stateButton.setText(currentState);
         providerButton.setText(selectedProvider == null ? ALL : selectedProvider);
-        countyButton.setText(selectedCounty == null ? ALL_COUNTIES : selectedCounty);
+        updateCountyButton();
 
         status.setText(String.format(Locale.US, "%,d cameras, %d states — %s",
                 catalog.totalCameras, catalog.states.size(), catalog.generated));
@@ -928,10 +935,10 @@ public final class CamDepotPane implements CameraStore.Listener {
         countyNames.add(ALL_COUNTIES);
         if (s != null)
             countyNames.addAll(s.counties);
-        if (selectedCounty != null && !countyNames.contains(selectedCounty)) {
-            selectedCounty = null;              // that county is not in this state
-            countyButton.setText(ALL_COUNTIES);
-        }
+        // Keep only what this state actually has. A county remembered from
+        // somewhere else would filter to nothing and look like a broken panel.
+        if (selectedCounties.retainAll(countyNames))
+            updateCountyButton();
         // Favorites are cross-state, so a saved one is very often in a state this
         // session has never selected -- and an id with no static record has no name
         // and nowhere to go to. Fetch the rest now, once the first state is in, so
@@ -971,7 +978,8 @@ public final class CamDepotPane implements CameraStore.Listener {
                 : store.everywhere();
         final String q = query.toLowerCase(Locale.US);
         final String provider = selectedProvider;
-        final String county = selectedCounty;
+        final java.util.Set<String> counties =
+                new java.util.HashSet<>(selectedCounties);
 
         // The map's current extent, read once rather than per camera. Compared as
         // bare doubles instead of GeoBounds.contains(GeoPoint) so a pan does not
@@ -1025,7 +1033,9 @@ public final class CamDepotPane implements CameraStore.Listener {
             // cross-state search result would drop every hit from elsewhere.
             if (provider != null && !provider.equals(c.provider))
                 continue;
-            if (q.isEmpty() && county != null && !county.equalsIgnoreCase(c.county))
+            // County belongs to a state, so it is not applied to a cross-state
+            // search result -- that would drop every hit from elsewhere.
+            if (q.isEmpty() && !counties.isEmpty() && !counties.contains(c.county))
                 continue;
             if (!q.isEmpty() && !matchesQuery(c, q))
                 continue;
@@ -1180,6 +1190,23 @@ public final class CamDepotPane implements CameraStore.Listener {
         status.setText(msg.toString());
     }
 
+    /**
+     * The chosen counties as one string for preferences.
+     *
+     * <p>Unit separator, not a comma: county names contain commas about as often
+     * as they contain anything else, and a delimiter that can appear in the data
+     * is a bug waiting for the right county name.
+     */
+    private String joinCounties() {
+        final StringBuilder b = new StringBuilder();
+        for (String c : selectedCounties) {
+            if (b.length() > 0)
+                b.append('\u001f');
+            b.append(c);
+        }
+        return b.toString();
+    }
+
     /** "CALTRANS (2917)" -> "CALTRANS". Labels carry counts; filters must not. */
     private static String stripCount(String label) {
         if (label == null)
@@ -1202,6 +1229,78 @@ public final class CamDepotPane implements CameraStore.Listener {
      * Dialog created from the plugin context, which has no window token, and it
      * crashes ATAK outright. See the field comment on {@link #stateButton}.
      */
+    /**
+     * Pick any number of counties, on the MapView context.
+     *
+     * <p>Nothing is applied until OK, so half-made selections never reach the map,
+     * and Clear is its own button because emptying a set by unticking a dozen
+     * boxes is not a thing to ask of anyone.
+     */
+    private void chooseCounties() {
+        final List<String> names = new ArrayList<>();
+        for (String c : countyNames) {
+            if (!ALL_COUNTIES.equals(c))
+                names.add(c);
+        }
+        if (names.isEmpty()) {
+            toast("This state publishes no counties");
+            return;
+        }
+        final String[] arr = names.toArray(new String[0]);
+        final boolean[] ticked = new boolean[arr.length];
+        for (int i = 0; i < arr.length; i++)
+            ticked[i] = selectedCounties.contains(arr[i]);
+
+        new AlertDialog.Builder(mapView.getContext())
+                .setTitle("Counties")
+                .setMultiChoiceItems(arr, ticked,
+                        new android.content.DialogInterface
+                                .OnMultiChoiceClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d,
+                                    int which, boolean isChecked) {
+                                ticked[which] = isChecked;
+                            }
+                        })
+                .setPositiveButton("OK",
+                        new android.content.DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d,
+                                    int w) {
+                                selectedCounties.clear();
+                                for (int i = 0; i < arr.length; i++) {
+                                    if (ticked[i])
+                                        selectedCounties.add(arr[i]);
+                                }
+                                updateCountyButton();
+                                apply();
+                            }
+                        })
+                .setNeutralButton("Clear",
+                        new android.content.DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d,
+                                    int w) {
+                                selectedCounties.clear();
+                                updateCountyButton();
+                                apply();
+                            }
+                        })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    /** One county by name, several by count, none as "All counties". */
+    private void updateCountyButton() {
+        final int n = selectedCounties.size();
+        if (n == 0)
+            countyButton.setText(ALL_COUNTIES);
+        else if (n == 1)
+            countyButton.setText(selectedCounties.iterator().next());
+        else
+            countyButton.setText(String.format(Locale.US, "%d counties", n));
+    }
+
     private void choose(String title, final List<String> items, String current,
             final Chosen cb) {
         if (items.isEmpty()) {
