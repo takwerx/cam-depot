@@ -1125,10 +1125,23 @@ public final class CamDepotPane implements CameraStore.Listener {
 
         // The count belongs on the control: a filter says what it will cost before
         // it is used, and this one's cost changes every time the map moves.
-        // out only, not the pinned favorites: those are deliberately exempt from
-        // every filter including this one, and each section carries its own count.
+        //
+        // Pinned favorites are counted too, and that is a correction. `out` has them
+        // removed so they are not listed twice, so counting `out` alone answered
+        // "how many matched the filter" while the operator was reading it as "how
+        // many are on screen". Zoomed in on two starred cameras it said (0) with
+        // both of them plainly drawn on the map -- the panel and the map
+        // contradicting each other, which is the one thing this panel must never do.
+        int onScreenFavs = 0;
+        if (onScreen) {
+            for (Camera c : favs) {
+                if (inside(c, vN, vS, vW, vE, idl))
+                    onScreenFavs++;
+            }
+        }
         inView.setText(onScreen
-                ? String.format(Locale.US, "On screen only (%,d)", out.size())
+                ? String.format(Locale.US, "On screen only (%,d)",
+                        out.size() + onScreenFavs)
                 : "On screen only");
 
         adapter.setSections(favs, out, sortFrom, currentState, query);

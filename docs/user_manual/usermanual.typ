@@ -3,7 +3,7 @@
 
 #show: userguide.with(
    plugin-name: "Cam Depot",
-   plugin-version: "0.7",
+   plugin-version: "0.8",
    platform: "ATAK",
    platform-version: "5.8.0",
 )
@@ -99,9 +99,15 @@ happened to publish a county.
 *On screen only* limits the list to the cameras inside the current map view, and
 keeps following as you pan and zoom. Move the map and the list moves with it.
 
-This is the fastest way to answer "what is near this spot": put the spot on
-screen, and the panel is already the answer. It is also how to work an area you
-are not standing in, since it follows the map rather than your own position.
+#v(6pt)
+#image("20.jpg", width: 74%)
+
+#v(4pt)
+The count on the control and the count in the status line are the same number as
+what is drawn on the map -- twenty-two here. This is the fastest way to answer
+"what is near this spot": put the spot on screen, and the panel is already the
+answer. It follows the map rather than your own position, so it works just as
+well for an area you are not standing in.
 
 Leave it off and the list stays the whole state, however far the map wanders.
 ]
@@ -241,7 +247,15 @@ serving video when the catalog was built. Agencies do have outages; when one
 does, its cameras keep their video button rather than silently losing it, and
 they come back when the agency does.
 
-Closing the video returns you to the map. The toolbar icon reopens the panel.
+#v(6pt)
+#toolbox.side-by-side(columns: (7fr, 5fr))[
+  #image("15.jpg", width: 100%)
+][
+  ATAK's own player, with its snapshot and record controls. The overlay across
+  the picture is the agency's, not ours.
+
+  Closing the video returns you to the map. The toolbar icon reopens the panel.
+]
 ]
 
 #tak-slide[
@@ -250,9 +264,18 @@ Closing the video returns you to the map. The toolbar icon reopens the panel.
 The map itself says which cameras stream and which only take pictures, so you
 can tell before you open one.
 
-- A camera that *streams* keeps ATAK's own camcorder icon.
-- A camera that is *stills only* draws as a plain camera instead.
+#v(6pt)
+#toolbox.side-by-side(columns: (6fr, 6fr))[
+  #image("21.jpg", width: 92%)
 
+  *Streams.* ATAK's own camcorder.
+][
+  #image("22.jpg", width: 92%)
+
+  *Stills only.* A plain camera.
+]
+
+#v(6pt)
 The list says the same thing a second way: a streaming camera carries a small
 #sym.triangle.filled.r *live* under its name, and its pane offers
 *#sym.triangle.filled.r Live video* where a stills camera offers
@@ -262,18 +285,17 @@ The list says the same thing a second way: a streaming camera carries a small
 #tak-slide[
 = Bearings
 
-#toolbox.side-by-side(columns: (7fr, 5fr))[
-  #image("16.jpg", width: 72%)
-][
-  Cameras that report which way they are pointing can draw a bearing line on the
-  map, labeled with its azimuth -- `113°T` here.
+Cameras that report which way they are pointing can draw a bearing line on the
+map, labeled with its azimuth. *Show bearing* turns it on, and the marker turns
+orange while it is on. On a steerable camera the line follows the camera as it
+moves, updating every few seconds.
 
-  *Show bearing* turns it on, and the marker turns orange while it is on. On a
-  steerable camera the line follows the camera as it moves, updating every few
-  seconds.
+#v(6pt)
+#image("16.jpg", width: 74%)
 
-  The camera's pane gives the same number in words: *Bearing 113°T*.
-]
+#v(4pt)
+The pane and the map give the same number: *Bearing 355°T* beside the camera's
+name, `355°T` on the line itself.
 ]
 
 #tak-slide[
@@ -281,7 +303,7 @@ The list says the same thing a second way: a streaming camera carries a small
 
 The line is the *direction* the camera points. It is not how wide it sees.
 
-A camera's pane reports both -- *Bearing 113°T   Field of View 53.7°* -- but only
+A camera's pane reports both -- *Bearing 355°T   Field of View 62.8°* -- but only
 the bearing is drawn. A field of view is a wedge, and sixteen hundred overlapping
 wedges is a map you cannot read, so Cam Depot draws the direction and leaves the
 width as a number.

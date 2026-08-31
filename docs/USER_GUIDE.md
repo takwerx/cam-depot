@@ -1,12 +1,12 @@
 # Cam Depot for ATAK — User Guide
 
-**Version 0.7 · takwerx**
+**Version 0.8 · takwerx**
 
-**Download Cam Depot 0.7** (pick the one matching your ATAK-CIV version, sideload, then load it in ATAK's Plugins manager):
+**Download Cam Depot 0.8** (pick the one matching your ATAK-CIV version, sideload, then load it in ATAK's Plugins manager):
 
-- **ATAK-CIV 5.6:** https://github.com/takwerx/cam-depot/releases/download/v0.7/ATAK-Plugin-CamDepot-0.7--5.6.0-civ-release.apk
-- **ATAK-CIV 5.7:** https://github.com/takwerx/cam-depot/releases/download/v0.7/ATAK-Plugin-CamDepot-0.7--5.7.0-civ-release.apk
-- **ATAK-CIV 5.8:** https://github.com/takwerx/cam-depot/releases/download/v0.7/ATAK-Plugin-CamDepot-0.7--5.8.0-civ-release.apk
+- **ATAK-CIV 5.6:** https://github.com/takwerx/cam-depot/releases/download/v0.8/ATAK-Plugin-CamDepot-0.8--5.6.0-civ-release.apk
+- **ATAK-CIV 5.7:** https://github.com/takwerx/cam-depot/releases/download/v0.8/ATAK-Plugin-CamDepot-0.8--5.7.0-civ-release.apk
+- **ATAK-CIV 5.8:** https://github.com/takwerx/cam-depot/releases/download/v0.8/ATAK-Plugin-CamDepot-0.8--5.8.0-civ-release.apk
 
 All releases: https://github.com/takwerx/cam-depot/releases
 
@@ -83,9 +83,13 @@ left:
 **On screen only** limits the list to the cameras inside the current map view,
 and keeps following as you pan and zoom. Move the map and the list moves with it.
 
-This is the fastest way to answer "what is near this spot" — put the spot on
-screen, and the panel is already the answer. It follows the map rather than your
-own position, so it works just as well for an area you are not standing in.
+![On screen only, with its count](screenshots/23_on_screen_only.jpg)
+
+The count on the control, the count in the status line and what is drawn on the
+map are the same number. This is the fastest way to answer "what is near this
+spot" — put the spot on screen, and the panel is already the answer. It follows
+the map rather than your own position, so it works just as well for an area you
+are not standing in.
 
 ---
 
@@ -192,12 +196,22 @@ serving video when the catalog was built. Agencies do have outages; when one doe
 its cameras keep their video button rather than silently losing it, and they come
 back when the agency does.
 
+![Live video in ATAK's player](screenshots/17_live_video.jpg)
+
+It plays in ATAK's own player, with its snapshot and record controls. The overlay
+across the picture is the agency's, not ours.
+
 Closing the video returns you to the map. The toolbar icon reopens the panel.
 
 ### Which cameras stream
 
-The map says so before you open anything: a camera that **streams** keeps ATAK's
-own camcorder icon, and a camera that is **stills only** draws as a plain camera.
+The map says so before you open anything.
+
+| Streams | Stills only |
+|---|---|
+| ![Streaming camera icon](screenshots/24_icon_streaming.jpg) | ![Stills camera icon](screenshots/25_icon_stills.jpg) |
+| ATAK's own camcorder | A plain camera |
+
 The list says it a second way, with ▶ **live** under the name.
 
 ---
@@ -207,7 +221,7 @@ The list says it a second way, with ▶ **live** under the name.
 Cameras that report which way they are pointing can draw a bearing line on the
 map, labeled with its azimuth.
 
-![A bearing line at 113°T](screenshots/16_bearing_line.jpg)
+![A bearing line at 355°T](screenshots/16_bearing_line.jpg)
 
 **Show bearing** turns it on, and the marker turns orange while it is on. On a
 steerable camera the line follows the camera as it moves, updating every few
@@ -219,7 +233,7 @@ seconds.
 
 The line is the **direction** the camera points. It is not how wide it sees.
 
-A camera's pane reports both — **Bearing 113°T   Field of View 53.7°** — but only
+A camera's pane reports both — **Bearing 355°T   Field of View 62.8°** — but only
 the bearing is drawn. A field of view is a wedge, and sixteen hundred overlapping
 wedges is a map you cannot read, so Cam Depot draws the direction and leaves the
 width as a number.
