@@ -426,6 +426,13 @@ public final class CamDepotPane implements CameraStore.Listener {
                         // first thing anyone tries when the panel looks wrong.
                         busy("Syncing with the camera service\u2026");
                         layer.clear();
+                        // Also drop the video entries registered from the OLD
+                        // catalog. Without this a sync reloads every camera and
+                        // still plays the previous stream URL, because both
+                        // registration paths short-circuit on an entry ATAK still
+                        // holds -- which is precisely what happened when the live
+                        // host moved and only an ATAK restart fixed it.
+                        layer.forgetVideoEntries();
                         loadedAll = false;
                         store.reset();
                         store.loadCatalog();

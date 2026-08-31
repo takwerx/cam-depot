@@ -466,6 +466,48 @@ public final class CameraLayer {
         shown.clear();
     }
 
+    /**
+     * Forget the video entries registered from the previous catalog.
+     *
+     * <p>For Sync, and only Sync. {@code videoUids} maps a camera to the
+     * ConnectionEntry UID already registered with ATAK's VideoManager, and both
+     * registration paths short-circuit on it -- deliberately, because re-registering
+     * on every marker rebuild is a per-pan cost for no gain.
+     *
+     * <p>That is right until the catalog itself changes underneath. When Cam Depot's
+     * live host moved on 2026-08-31, a device that pressed Sync kept playing from the
+     * old host: the entry was still held, so the plugin never rebuilt it, and only
+     * restarting ATAK -- which empties VideoManager -- fixed it. Sync exists so that
+     * restart is not needed, and a moved stream URL is the exact case it was written
+     * for.
+     *
+     * <p>Not called from {@link #clear()}, which also runs on an ordinary state
+     * switch. Forgetting there would re-register a state's entries every time the
+     * operator moved away and back.
+     *
+     * <p>The removal runs off the UI thread. VideoManager persists to disk on the
+     * caller's thread, which is why entries are added with the batched
+     * {@code addConnectionEntries(list, false)} in the first place.
+     */
+    public void forgetVideoEntries() {
+        if (videoUids.isEmpty())
+            return;
+        final Set<String> stale = new HashSet<>(videoUids.values());
+        videoUids.clear();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    com.atakmap.android.video.manager.VideoManager.getInstance()
+                            .removeConnectionEntries(stale);
+                    Log.d(TAG, "forgot " + stale.size() + " video entries for a sync");
+                } catch (LinkageError | RuntimeException e) {
+                    Log.w(TAG, "could not remove stale video entries", e);
+                }
+            }
+        }, "camdepot-video-forget").start();
+    }
+
     private void remove(String id) {
         // Deliberately NOT hideFov(id): ATAK's own OnGroupChangedListener drops the
         // SensorFOV when the marker leaves the group, so writing hideFov here only
