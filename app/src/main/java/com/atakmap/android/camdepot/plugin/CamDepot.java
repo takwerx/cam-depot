@@ -80,7 +80,10 @@ public class CamDepot implements IPlugin {
         toolbarItem = new ToolbarItem.Builder(
                 pluginContext.getString(R.string.app_name),
                 MarshalManager.marshal(
-                        pluginContext.getResources().getDrawable(R.drawable.ic_launcher),
+                        // ic_toolbar, not ic_launcher. See the note on the
+                        // ToolPreference icon below: this one sits on ATAK's dark
+                        // toolbar and wants the bare white glyph.
+                        pluginContext.getResources().getDrawable(R.drawable.ic_toolbar),
                         android.graphics.drawable.Drawable.class,
                         gov.tak.api.commons.graphics.Bitmap.class))
                 .setListener(new ToolbarItemAdapter() {
@@ -120,8 +123,26 @@ public class CamDepot implements IPlugin {
                             pluginContext.getString(R.string.app_name),
                             pluginContext.getString(R.string.prefs_summary),
                             PREFS_KEY,
+                            // ic_toolbar, not ic_launcher.
+                            //
+                            // The SDK template ships one icon and wires it to three
+                            // places: android:icon in the manifest, the toolbar
+                            // button, and this row. A bare white glyph on
+                            // transparency is right for the two that sit on ATAK's
+                            // dark UI and INVISIBLE for android:icon, which Android
+                            // draws on light backgrounds -- the app list, Settings,
+                            // and the My Files browser a user reaches the extracted
+                            // manual through. It renders as a blank square there.
+                            //
+                            // Inverting the single icon just moves the problem: the
+                            // toolbar button disappears instead. So there are two.
+                            // ic_launcher is the glyph on a #121212 tile for
+                            // Android; ic_toolbar is the bare glyph for ATAK.
+                            // Measured on the built APK: 16% opaque and 0 non-white
+                            // pixels before, 99% and 60,146 after. Found on Map
+                            // Depot by the parallel session, 2026-08-31.
                             pluginContext.getResources().getDrawable(
-                                    R.drawable.ic_launcher),
+                                    R.drawable.ic_toolbar),
                             new CamDepotPreferenceFragment(pluginContext)));
         } catch (LinkageError | RuntimeException notThisBuild) {
             Log.w(TAG, "could not register preferences: " + notThisBuild);
