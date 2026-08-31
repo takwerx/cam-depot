@@ -97,6 +97,7 @@ public final class CamDepotPane implements CameraStore.Listener {
      * filter: those narrow the selected state, this one leaves the state behind.
      */
     private final Button favoritesButton;
+    private final Button bearingsOffButton;
     private final EditText search;
     /**
      * Clears the search box, and is disabled while it is empty.
@@ -237,6 +238,7 @@ public final class CamDepotPane implements CameraStore.Listener {
                 R.layout.controls_header, null);
         list.addHeaderView(controls, null, false);
         favoritesButton = controls.findViewById(R.id.favorites);
+        bearingsOffButton = controls.findViewById(R.id.bearings_off);
         stateButton = controls.findViewById(R.id.state);
         providerButton = controls.findViewById(R.id.provider);
         countyButton = controls.findViewById(R.id.county);
@@ -266,6 +268,7 @@ public final class CamDepotPane implements CameraStore.Listener {
 
         wire();
         updateFavoritesButton();
+        updateBearingsOffButton();
         setRadiusFromProgress(0);
         mapView.addOnMapMovedListener(zoomWatch);
         layer.setMaxResolution(savedThreshold());
@@ -396,6 +399,17 @@ public final class CamDepotPane implements CameraStore.Listener {
         fireOnly.setOnCheckedChangeListener(cc);
         liveOnly.setOnCheckedChangeListener(cc);
         stillOnly.setOnCheckedChangeListener(cc);
+
+        bearingsOffButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final int n = layer.fovCount();
+                layer.hideAllFovs();
+                updateBearingsOffButton();
+                toast(n == 1 ? "Bearing line off"
+                        : String.format(Locale.US, "%d bearing lines off", n));
+            }
+        });
 
         controls.findViewById(R.id.resync).setOnClickListener(
                 new View.OnClickListener() {
@@ -791,6 +805,21 @@ public final class CamDepotPane implements CameraStore.Listener {
         favoritesButton.setText(styled);
     }
 
+    /**
+     * The count of drawn bearing lines, and disabled at zero.
+     *
+     * <p>Disabled rather than hidden: a control that appears and disappears is one
+     * the operator has to hunt for, and the greyed-out button is itself the answer
+     * to "is anything still drawn out there".
+     */
+    private void updateBearingsOffButton() {
+        final int n = layer.fovCount();
+        bearingsOffButton.setEnabled(n > 0);
+        bearingsOffButton.setText(n == 0 ? "No bearings shown"
+                : String.format(Locale.US, "Turn off %d bearing%s",
+                        n, n == 1 ? "" : "s"));
+    }
+
     /** Marked. The one gold in the plugin, so a star is a star wherever it appears. */
     private static final int STAR_ON = 0xFFFFC107;
     /** Unmarked: present enough to be found, quiet enough not to be a row of stars. */
@@ -968,6 +997,10 @@ public final class CamDepotPane implements CameraStore.Listener {
 
     /** Run every filter and push the result to both the list and the map. */
     private void apply() {
+        // ATAK's radial can turn a bearing on or off without the panel hearing about
+        // it, so the count is re-read here rather than only where the panel itself
+        // toggles one. apply() runs on every filter change and on a settled map move.
+        updateBearingsOffButton();
         final String query = search.getText().toString().trim();
         // A name search looks at every state, not just the loaded one. Typing "Moses"
         // while on California found nothing because Moses is in Nevada and Washington,
@@ -1399,6 +1432,7 @@ public final class CamDepotPane implements CameraStore.Listener {
                     ((Button) b).setText("Hide bearing");
                     layer.goTo(c);
                 }
+                updateBearingsOffButton();
             }
         });
 
@@ -1598,8 +1632,24 @@ public final class CamDepotPane implements CameraStore.Listener {
         }
     }
 
+    /**
+     * The pane's own header.
+     *
+     * <p>The camera's name leads, because the pane did not say which camera it was
+     * showing: it opened straight into the agency and the county, and an operator
+     * with two panes' worth of Bear Mtn had nothing to tell them apart.
+     *
+     * <p>The pointing line is written to match the label ATAK draws on the bearing
+     * itself -- {@code 113°T} in both places -- so the number in the pane and the
+     * line on the map read as the same fact. {@code pan} is that bearing and was
+     * never called one. {@code fov} is how wide the camera sees and is deliberately
+     * NOT drawn on the map ({@code CameraLayer.attachSensor} sets fov=0: sixteen
+     * hundred wedges is soup), so it is spelled out here in words rather than left
+     * as a bare number beside a line that does not represent it.
+     */
     private String describe(Camera c) {
         final StringBuilder b = new StringBuilder();
+        b.append(c.label()).append('\n');
         b.append(c.provider);
         if (c.sponsor != null && !c.sponsor.isEmpty())
             b.append(" / ").append(c.sponsor);
@@ -1609,9 +1659,14 @@ public final class CamDepotPane implements CameraStore.Listener {
             b.append("   live stream");
         if (!c.county.isEmpty())
             b.append('\n').append(c.county).append(", ").append(c.state);
-        if (!Double.isNaN(c.pan))
-            b.append(String.format(Locale.US, "\npan %.1f°  tilt %.1f°  fov %.1f°",
-                    c.pan, c.tilt, c.fov));
+        if (!Double.isNaN(c.pan)) {
+            b.append(String.format(Locale.US, "\nBearing %.0f°T", c.pan));
+            // Only when the agency published one. A camera can report where it is
+            // pointing without saying how wide it sees, and "Field of View 0.0°"
+            // would be a worse answer than saying nothing.
+            if (!Double.isNaN(c.fov) && c.fov > 0)
+                b.append(String.format(Locale.US, "   Field of View %.1f°", c.fov));
+        }
         return b.toString();
     }
 

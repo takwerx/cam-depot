@@ -471,6 +471,10 @@ public final class CameraLayer {
         // SensorFOV when the marker leaves the group, so writing hideFov here only
         // buys a metadata dispatch and a group scan per removal -- during viewport
         // churn that is 120 of them a frame, for a marker that is going away.
+        //
+        // `showing` only, never `requested`: the geometry is going away, the
+        // operator's request is not. update() puts the line back when the camera
+        // scrolls in again.
         showing.remove(id);
         final Marker m = markers.remove(id);
         if (m != null) {
@@ -808,7 +812,7 @@ public final class CameraLayer {
         // hideFov is PRESENCE: set means hidden, absent means shown. A camera whose
         // bearing was asked for while it was off the map must not be born hidden, or
         // the request is silently lost the moment it is finally drawn.
-        if (!showing.contains(c.id))
+        if (!requested.contains(c.id))
             m.setMetaBoolean(SensorDetailHandler.HIDE_FOV, true);
         m.setMetaBoolean("readiness", true);
         m.setMetaBoolean("archive", false);
@@ -1118,7 +1122,7 @@ public final class CameraLayer {
         // syncFov set. A refresh that colored one unconditionally would put the
         // orange back on a marker whose line the operator had just switched off.
         if (c.hasFov())
-            applyTint(m, c, showing.contains(c.id));
+            applyTint(m, c, requested.contains(c.id));
         else
             m.setMetaInteger("color", baseColor(c));
         m.setMetaString("remarks", remarks(c));
@@ -1139,14 +1143,14 @@ public final class CameraLayer {
                 m.addOnMetadataChangedListener(
                         SensorDetailHandler.HIDE_FOV, fovWatch);
                 m.setMetaBoolean(SENSOR_READY, true);
-                if (showing.contains(c.id))
+                if (requested.contains(c.id))
                     m.toggleMetaData(SensorDetailHandler.HIDE_FOV, false);
             }
             // Only the bearing moves between refreshes; everything else is fixed.
             m.setMetaInteger(SensorDetailHandler.AZIMUTH_ATTRIBUTE,
                     (int) Math.round(c.pan));
             aimIcon(m, c);              // follow the camera as it slews
-            if (showing.contains(c.id))
+            if (requested.contains(c.id))
                 styleFov(m, c, true);
         }
     }
@@ -1181,6 +1185,7 @@ public final class CameraLayer {
         // Recording the intent first means create() leaves hideFov off and update()
         // styles the line the moment the marker is built, so "Go to" brings the
         // camera into view already showing its bearing.
+        requested.add(c.id);
         showing.add(c.id);
         final Marker m = markers.get(c.id);
         if (m == null)
@@ -1194,15 +1199,44 @@ public final class CameraLayer {
         styleFov(m, c, true);
     }
 
+    /**
+     * Take a bearing down, and do not depend on {@link #syncFov} to finish the job.
+     *
+     * <p>This used to write the {@code hideFov} metadata and stop, on the assumption
+     * that {@code fovWatch} would arrive and switch the geometry off. It does -- but
+     * {@code syncFov} early-returns when {@code shown} has no entry for the id, which
+     * is any camera not in the currently drawn set. So "turn off all bearings" on a
+     * camera that had scrolled out of view cleared the request and greyed the button
+     * while leaving the line drawn on the map: the panel said there were no bearings
+     * and the map plainly disagreed.
+     *
+     * <p>The metadata write stays, because ATAK's radial reads it and the two
+     * switches must not disagree. The geometry is now switched off here as well.
+     */
     public void hideFov(String id) {
-        final Marker m = markers.get(id);
-        if (m != null)
-            setFovVisible(m, false);    // fovWatch hides it
+        requested.remove(id);
         showing.remove(id);
+        final Marker m = markers.get(id);
+        if (m == null)
+            return;
+        setFovVisible(m, false);
+        try {
+            final com.atakmap.android.maps.SensorFOV f = existingFov(m);
+            if (f != null)
+                f.setVisible(false);
+            final Camera c = shown.get(id);
+            if (c != null)
+                applyTint(m, c, false);     // the marker stops reading as "line on"
+        } catch (LinkageError | RuntimeException e) {
+            Log.w(TAG, "could not hide the sensor FOV for " + id, e);
+        }
     }
 
     public void hideAllFovs() {
-        for (String id : new ArrayList<>(showing))
+        // Over `requested`, so a bearing asked for on a camera that is currently off
+        // screen is turned off too. Turning off only what happens to be drawn would
+        // leave lines waiting to reappear.
+        for (String id : new ArrayList<>(requested))
             hideFov(id);
     }
 
@@ -1264,12 +1298,16 @@ public final class CameraLayer {
         if (c == null || !c.hasFov())
             return;
         if (m.hasMetaValue(SensorDetailHandler.HIDE_FOV)) {
+            // An explicit turn-off, from ATAK's radial or from hideFov: clear the
+            // request as well, or the line would come back on the next pan.
+            requested.remove(id);
             showing.remove(id);
             final com.atakmap.android.maps.SensorFOV f = existingFov(m);
             if (f != null)
                 f.setVisible(false);
             applyTint(m, c, false);
         } else {
+            requested.add(id);
             showing.add(id);
             styleFov(m, c, true);
             applyTint(m, c, true);
@@ -1308,11 +1346,49 @@ public final class CameraLayer {
         }
     }
 
-    /** Cameras whose azimuth line is currently asked for. */
+    /**
+     * Cameras whose marker currently carries a drawn line.
+     *
+     * <p>Emptied for a camera when its marker goes away, because that is what it
+     * describes: geometry that exists. {@link #setRangeMeters} walks it to re-aim
+     * live lines, which is only meaningful for markers that are on the map.
+     */
     private final Set<String> showing = new HashSet<>();
 
+    /**
+     * Cameras the operator has asked to see a bearing for.
+     *
+     * <p>Separate from {@link #showing} because the two are different facts and
+     * conflating them cost the feature once. A request outlives its marker: a
+     * bearing asked for on a camera that then scrolls out of the viewport is still
+     * wanted, and the line comes back with the camera rather than being silently
+     * dropped the moment you look somewhere else.
+     *
+     * <p>It also outlives a camera with no marker at all -- {@code showFov} records
+     * a request for a camera in another state or below the zoom threshold, so
+     * "Go to" arrives with the bearing already on.
+     *
+     * <p>Only three things clear a request: {@code hideFov}, {@code hideAllFovs},
+     * and ATAK's own radial toggle arriving through {@link #syncFov}. Panning is not
+     * one of them.
+     */
+    private final Set<String> requested = new HashSet<>();
+
     public boolean isFovShowing(String id) {
-        return showing.contains(id);
+        return requested.contains(id);
+    }
+
+    /**
+     * How many bearing lines are drawn right now.
+     *
+     * <p>The panel's "Bearings off" button counts with this and disables itself at
+     * zero, so a control that would do nothing says so before it is pressed rather
+     * than after. Bearings are turned on one camera at a time, from the camera's own
+     * pane or from ATAK's radial, and there was no way to see how many were on --
+     * let alone put them all away -- without visiting each camera again.
+     */
+    public int fovCount() {
+        return requested.size();
     }
 
     public void setRangeMeters(double meters) {
@@ -1333,7 +1409,7 @@ public final class CameraLayer {
 
     /** Push a refreshed bearing into a line that is currently showing. */
     public void updateFov(Camera c) {
-        if (c == null || !showing.contains(c.id) || !c.hasFov())
+        if (c == null || !requested.contains(c.id) || !c.hasFov())
             return;
         final Marker m = markers.get(c.id);
         if (m == null)

@@ -36,6 +36,17 @@
             android:text="@string/resync" />
     </LinearLayout>
 
+    <!-- Turns off every bearing line at once. Bearings go on one camera at a time,
+         from the camera's pane or from ATAK's radial, so there was no way to put a
+         session's worth of them away short of visiting each camera again. Disabled
+         while none are on, and carrying the count, so it says what it will do before
+         it is pressed. -->
+    <Button
+        style="@style/TakwerxButton"
+        android:id="@+id/bearings_off"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
