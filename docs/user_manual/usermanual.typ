@@ -3,7 +3,7 @@
 
 #show: userguide.with(
    plugin-name: "Cam Depot",
-   plugin-version: "0.8",
+   plugin-version: "0.6",
    platform: "ATAK",
    platform-version: "5.8.0",
 )
