@@ -297,8 +297,25 @@ public final class CameraLayer {
         applyZoomGate();
     }
 
+    /**
+     * A hair of tolerance, and it is load bearing.
+     *
+     * <p>"Use this zoom" stores the CURRENT resolution as the threshold, so the
+     * scale you were looking at must count as within it. The threshold is persisted
+     * as a float while the comparison is in double, so after a restart the value
+     * comes back a fraction BELOW what was set -- and a strict compare then hides
+     * everything at the exact position the operator chose. Seen with the panel
+     * reading "Drawn at 5.08 mi or closer, scale bar now: 5.08 mi -- hidden", which
+     * is the plugin disagreeing with itself on screen.
+     *
+     * <p>0.1% is thousands of times larger than float rounding error and far below
+     * anything an operator could perceive on a scale bar.
+     */
+    private static final double ZOOM_EPSILON = 1.001;
+
     public boolean isWithinZoom() {
-        return !gateEnabled || mapView.getMapResolution() <= maxResolution;
+        return !gateEnabled
+                || mapView.getMapResolution() <= maxResolution * ZOOM_EPSILON;
     }
 
     private void applyZoomGate() {
