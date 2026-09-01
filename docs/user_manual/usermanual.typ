@@ -119,8 +119,8 @@ Leave it off and the list stays the whole state, however far the map wanders.
   #image("7.png", width: 76%)
 ][
   Typing in the search box searches *every state at once*, not only the one in
-  the dropdown. Here "pitt" finds a wildfire camera in California and three
-  highway cameras in British Columbia together.
+  the dropdown. Here "pitts" finds a wildfire lookout in California and a
+  highway camera in Kansas together, 1,300 miles apart.
 
   Camera names are the agency's own -- "I-40/75 \@ West Hills", "Keller
   Peak 1" -- so a road number, a landmark or a peak name will usually find it.
@@ -161,18 +161,54 @@ says so rather than looking complete.
 so you can see what a filter will leave you before you tick it. A filter with
 nothing behind it is disabled rather than left to be discovered.
 
-#v(6pt)
-#toolbox.side-by-side(columns: (12fr,))[
-  #image("9.png", width: 100%)
 ]
 
-#v(4pt)
-The radius slider limits the list to cameras within a set distance. By default
-that is measured from your own position; *From me* switches it to measure from
-the center of the map instead, which is what you want when you are planning
-somewhere you are not standing.
+#tak-slide[
+= Distance from a point
 
-Distances follow whatever units ATAK is set to.
+Everything within a set distance, and nothing beyond it.
+
+#v(6pt)
+#toolbox.side-by-side(columns: (7fr, 5fr))[
+  #image("9.png", width: 100%)
+][
+  The slider runs to 50 in whatever units ATAK is set to, and the label above it
+  always reads the current distance and the point it is measured from.
+
+  *Measuring from* rotates between your own position and the center of the map,
+  and says which one is in force rather than only offering to change it.
+
+  *Use this extent* takes the radius from what is on screen, so "everything I am
+  looking at" is one tap rather than a guess at a number.
+
+  *Presets* offers Off, 2, 5, 10, 25 and 50, and names the one in force. Drag the
+  slider to something in between and it reads *Presets* again, because no preset
+  is active any more.
+]
+]
+
+#tak-slide[
+// Deliberately bold text rather than a heading. The template builds its Contents
+// page from #outline(), and a heading on THIS slide makes that page appear
+// carrying a single stray entry -- checked by demoting it, and by trying both
+// heading levels. Not worth fighting the template for a subheading.
+*It follows, and it is remembered*
+
+#v(6pt)
+#toolbox.side-by-side(columns: (5fr, 7fr))[
+  #image("9a.png", width: 92%)
+][
+  Measured from *My Location* the circle travels with you, so a radius set at the
+  start of a drive still means the same thing an hour later.
+
+  Measured from *Map Center* it follows the map. Pan somewhere else and the list
+  is about where you are now looking.
+
+  Both the distance and the point it is measured from survive restarting ATAK,
+  along with the rest of the panel.
+
+  Distances follow whatever units ATAK is set to.
+]
 ]
 
 #tak-slide[
@@ -206,6 +242,13 @@ Distances follow whatever units ATAK is set to.
 Favorites are not tied to a state. A lookout in California and a highway camera
 in Ontario sit in the same list. Favorites First keeps the handful of cameras
 you actually watch within reach without giving up the rest of the catalog.
+
+#v(6pt)
+*While Favorites First is on, a favorite ignores every filter.* State, county,
+radius and the Show boxes all pass it by, and it stays on the map whatever the
+panel says -- which is the point: a camera you starred does not vanish because of
+a setting you left on an hour ago. The status line says so. Turn Favorites First
+off and they become ordinary cameras again, filtered like everything else.
 ]
 
 #tak-slide[
@@ -240,7 +283,7 @@ Where the agency publishes a stream, *Live video* plays it in ATAK's own player.
 
 Not every camera has one. A camera that only publishes pictures says
 "Video (still only)" rather than offering a button that cannot work. Of the
-38,000 cameras in the catalog, about 9,000 stream.
+38,000 cameras in the catalog, about 10,500 stream.
 
 Streams are checked before they are published, so a camera that offers video was
 serving video when the catalog was built. Agencies do have outages; when one
@@ -296,6 +339,18 @@ moves, updating every few seconds.
 #v(4pt)
 The pane and the map give the same number: *Bearing 355°T* beside the camera's
 name, `355°T` on the line itself.
+
+#v(6pt)
+A bearing stays on when you pan away from its camera and comes back with it, so
+looking at something else does not put it away.
+
+#v(4pt)
+#image("16b.png", width: 74%)
+
+#v(4pt)
+Bearings go on one camera at a time, so the panel has one control to put them all
+away. It carries the count, is greyed out when there are none, and clears lines on
+cameras that are currently off screen as well as the ones in front of you.
 ]
 
 #tak-slide[

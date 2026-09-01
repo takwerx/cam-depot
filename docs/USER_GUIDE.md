@@ -96,8 +96,8 @@ are not standing in.
 ## 3. Finding one camera by name
 
 Typing in the search box searches **every state at once**, not only the one in the
-dropdown. Here "pitt" finds a wildfire camera in California and three highway
-cameras in British Columbia together.
+dropdown. Here "pitts" finds a wildfire lookout in California and a highway camera
+in Kansas together, 1,300 miles apart.
 
 ![Searching across states](screenshots/7_search_across_states.png)
 
@@ -129,10 +129,26 @@ discovered.
 
 ![The radius slider](screenshots/9_radius_from_a_point.png)
 
-The radius slider limits the list to cameras within a set distance. By default
-that is measured from your own position; **From me** switches it to measure from
-the center of the map instead, which is what you want when you are planning
-somewhere you are not standing. Distances follow whatever units ATAK is set to.
+### Distance from a point
+
+![The distance controls](screenshots/9_radius_from_a_point.png)
+
+The slider runs to 50 in whatever units ATAK is set to, and the label above it
+always reads the current distance and the point it is measured from.
+
+- **Measuring from** rotates between your own position and the center of the map,
+  and says which one is in force rather than only offering to change it.
+- **Use this extent** takes the radius from what is on screen, so "everything I am
+  looking at" is one tap rather than a guess at a number.
+- **Presets** offers Off, 2, 5, 10, 25 and 50, and names the one in force. Drag the
+  slider to something in between and it reads **Presets** again.
+
+![Radius presets](screenshots/26_radius_presets.png)
+
+**It follows.** Measured from *My Location* the circle travels with you, so a
+radius set at the start of a drive still means the same thing an hour later.
+Measured from *Map Center* it follows the map — pan somewhere else and the list is
+about where you are now looking. Both survive restarting ATAK.
 
 ---
 
@@ -154,6 +170,12 @@ They get their own section, with the whole state still below it:
 Favorites are not tied to a state. A lookout in California and a highway camera in
 Ontario sit in the same list, so the handful you actually watch stays within reach
 without giving up the rest of the catalog.
+
+**While Favorites First is on, a favorite ignores every filter.** State, county,
+radius and the Show boxes all pass it by, and it stays on the map whatever the
+panel says — which is the point: a camera you starred does not vanish because of a
+setting you left on an hour ago. The status line says so. Turn Favorites First off
+and they become ordinary cameras again, filtered like everything else.
 
 The same star appears in the camera's own pane, so you can mark one while you are
 looking at it.
@@ -189,7 +211,7 @@ Where the agency publishes a stream, **Live video** plays it in ATAK's own playe
 
 Not every camera has one. A camera that only publishes pictures says
 **Video (still only)** rather than offering a button that cannot work. Of the
-38,000 cameras in the catalog, about 9,000 stream.
+38,000 cameras in the catalog, about 10,500 stream.
 
 Streams are checked before they are published, so a camera that offers video was
 serving video when the catalog was built. Agencies do have outages; when one does,
@@ -225,7 +247,16 @@ map, labeled with its azimuth.
 
 **Show bearing** turns it on, and the marker turns orange while it is on. On a
 steerable camera the line follows the camera as it moves, updating every few
-seconds.
+seconds. A bearing stays on when you pan away from its camera and comes back with
+it, so looking at something else does not put it away.
+
+Bearings go on one camera at a time, so the panel has one control to put them all
+away:
+
+![Turn off all bearings](screenshots/27_turn_off_bearings.png)
+
+It carries the count, is greyed out when there are none, and clears lines on
+cameras that are currently off screen as well as the ones in front of you.
 
 ![The button flips to Hide bearing](screenshots/17_hide_bearing.png)
 
