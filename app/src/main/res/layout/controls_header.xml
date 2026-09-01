@@ -179,24 +179,48 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 
+    <!-- Full width, one unit a step, to 50.
+         The original covered 0 to 400 across the width of a phone pane, about two
+         miles a pixel, so choosing 5 was a fight and everything useful lived in
+         the first eighth of the track. 100 was better and still too coarse to
+         control by thumb. Nothing here needs more: past 50 the state filter is
+         what is actually selecting, and "Off, the whole state" is the other end. -->
+    <SeekBar
+        android:id="@+id/radius"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="50" />
+
+    <!-- Says which point it measures from, rather than only offering to change it.
+         The old button read "From me" whether the radius was measured from the
+         operator or from the map centre, so the one thing it could not tell you
+         was the state it was in. -->
+    <Button
+        style="@style/TakwerxButton"
+        android:id="@+id/pick_point"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal">
 
-        <SeekBar
-            android:id="@+id/radius"
+        <Button
+            style="@style/TakwerxButton"
+            android:id="@+id/radius_extent"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:max="200" />
+            android:text="Use this extent" />
 
         <Button
-        style="@style/TakwerxButton"
-            android:id="@+id/pick_point"
-            android:layout_width="wrap_content"
+            style="@style/TakwerxButton"
+            android:id="@+id/radius_preset"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:text="@string/pick_point" />
+            android:text="Presets" />
     </LinearLayout>
 
     <TextView

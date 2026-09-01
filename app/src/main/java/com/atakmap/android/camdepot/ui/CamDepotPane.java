@@ -97,6 +97,7 @@ public final class CamDepotPane implements CameraStore.Listener {
      * filter: those narrow the selected state, this one leaves the state behind.
      */
     private final Button favoritesButton;
+    private Button radiusFromButton;
     private final Button bearingsOffButton;
     private final EditText search;
     /**
@@ -567,16 +568,77 @@ public final class CamDepotPane implements CameraStore.Listener {
                     }
                 });
 
-        controls.findViewById(R.id.pick_point).setOnClickListener(new View.OnClickListener() {
+        radiusFromButton = controls.findViewById(R.id.pick_point);
+        radiusFromButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // Center on where the map is looking. Simple, predictable, and it
-                // works whether or not the device has a GPS fix.
-                center = mapView.getPoint().get();
-                toast("Radius now measured from the map center");
+                // Rotates. It only ever went one way before -- once the radius was
+                // measured from the map there was no way back to the operator
+                // without restarting the panel.
+                center = center == null ? mapView.getPoint().get() : null;
+                updateRadiusFromButton();
+                setRadiusFromProgress(radius.getProgress());
                 apply();
             }
         });
+
+        controls.findViewById(R.id.radius_preset).setOnClickListener(
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        final List<String> names = new ArrayList<>();
+                        for (int r : RADIUS_PRESETS)
+                            names.add(r == 0 ? "Off — the whole state"
+                                    : String.format(Locale.US, "%d %s", r,
+                                            Units.bigLabel()));
+                        choose("Show cameras within", names, null, new Chosen() {
+                            @Override
+                            public void onChosen(String value) {
+                                for (int r : RADIUS_PRESETS) {
+                                    final String label = r == 0
+                                            ? "Off — the whole state"
+                                            : String.format(Locale.US, "%d %s", r,
+                                                    Units.bigLabel());
+                                    if (label.equals(value)) {
+                                        setRadiusBig(r);
+                                        return;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+
+        controls.findViewById(R.id.radius_extent).setOnClickListener(
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        // "What I am looking at", as a radius. Measured centre to
+                        // corner so the whole visible rectangle is inside the
+                        // circle -- centre to edge would exclude the corners of the
+                        // very view the operator is pointing at.
+                        final com.atakmap.coremap.maps.coords.GeoBounds b =
+                                mapView.getBounds();
+                        final GeoPoint c = mapView.getPoint().get();
+                        if (b == null || c == null) {
+                            toast("The map has no extent yet");
+                            return;
+                        }
+                        final double metres = haversine(
+                                c.getLatitude(), c.getLongitude(),
+                                b.getNorth(), b.getEast());
+                        final double big = metres / Units.bigToMeters(1);
+                        if (big > radius.getMax()) {
+                            toast(String.format(Locale.US,
+                                    "That view is wider than %d %s — radius set to "
+                                    + "the maximum", radius.getMax(),
+                                    Units.bigLabel()));
+                        }
+                        center = c;
+                        updateRadiusFromButton();
+                        setRadiusBig(Math.max(1, big));
+                    }
+                });
 
         list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
@@ -827,6 +889,17 @@ public final class CamDepotPane implements CameraStore.Listener {
                         n, n == 1 ? "" : "s"));
     }
 
+    /** Great-circle metres between two points. */
+    private static double haversine(double lat1, double lon1,
+                                    double lat2, double lon2) {
+        final double R = 6371008.8;
+        final double p1 = Math.toRadians(lat1), p2 = Math.toRadians(lat2);
+        final double dp = p2 - p1, dl = Math.toRadians(lon2 - lon1);
+        final double a = Math.sin(dp / 2) * Math.sin(dp / 2)
+                + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+    }
+
     /** Marked. The one gold in the plugin, so a star is a star wherever it appears. */
     private static final int STAR_ON = 0xFFFFC107;
     /** Unmarked: present enough to be found, quiet enough not to be a row of stars. */
@@ -895,13 +968,51 @@ public final class CamDepotPane implements CameraStore.Listener {
         return m > 0 ? m / res : 200;
     }
 
+    /**
+     * One unit per step, to 100.
+     *
+     * <p>It was two units per step to 400. Across a phone pane that put roughly two
+     * miles under every pixel, so choosing 5 was a fight and the useful end of the
+     * range -- under 25 -- lived in the first eighth of the track. Nothing in this
+     * catalog needs 400: past about 100 the state filter is what is actually
+     * selecting, and Presets covers the rest.
+     */
     private void setRadiusFromProgress(int progress) {
-        radiusBig = progress * 2;               // 0..400 in the operator's unit
+        radiusBig = progress;
         radiusLabel.setText(radiusBig <= 0
                 ? "Radius: off — the whole state"
                 : String.format(Locale.US, "Within %.0f %s of %s", radiusBig,
                         Units.bigLabel(),
                         center == null ? "my location" : "the map center"));
+        updateRadiusFromButton();
+    }
+
+    /**
+     * The From button says which point it measures from, not just what it will do.
+     *
+     * <p>It read "From me" in both states, so the one thing it could not tell you
+     * was the state it was in -- and the radius label is above the slider, easy to
+     * miss on a control you are dragging. Now it names the current point and the tap
+     * rotates between them.
+     */
+    private void updateRadiusFromButton() {
+        if (radiusFromButton == null)
+            return;
+        radiusFromButton.setText(center == null
+                ? "Measuring from: My Location"
+                : "Measuring from: Map Center");
+    }
+
+    /** Radius choices, in the operator's own big unit. 0 is off. */
+    // Stops where the slider stops. A preset the slider cannot reach would be
+    // silently clamped, so the panel would show 50 after the operator picked 100.
+    private static final int[] RADIUS_PRESETS = { 0, 2, 5, 10, 25, 50 };
+
+    private void setRadiusBig(double big) {
+        final int p = (int) Math.max(0, Math.min(radius.getMax(), Math.round(big)));
+        radius.setProgress(p);
+        setRadiusFromProgress(p);
+        apply();
     }
 
     // ---- store callbacks --------------------------------------------------
@@ -1225,7 +1336,12 @@ public final class CamDepotPane implements CameraStore.Listener {
             // A favorites list that is quietly shorter than its own count reads as
             // favorites having been lost.
             final int gone = favorites.size() - lastFavorites;
-            msg.append(String.format(Locale.US, "\nFavorites: %,d pinned above",
+            // Says they IGNORE the filters, not just where they sit in the list.
+            // An operator set a 4 mile radius from the map centre and still had
+            // cameras 167 miles away on the map -- all of them starred, all of them
+            // behaving exactly as designed, with nothing on screen saying so.
+            msg.append(String.format(Locale.US,
+                    "\nFavorites: %,d pinned above, shown whatever the filters say",
                     lastFavorites));
             if (gone > 0)
                 msg.append(String.format(Locale.US,
