@@ -5,14 +5,44 @@
     android:orientation="vertical"
     android:padding="6dp">
 
-    <TextView
-        android:id="@+id/status"
+    <!-- The status line and the toggle share the top row of the pane, outside the
+         list, so neither can scroll out of view: the filter controls ride as the
+         list's header and go off screen with it, and this control is the one thing
+         an operator must be able to reach without scrolling back to the top. The
+         toggle sits at the right edge, directly above Sync when the list is at
+         the top. -->
+    <!-- Top-aligned, not center_vertical: LinearLayout's centering shifts a child
+         up by its bottom margin, which is how the first cut of this button lost
+         its top edge. The button is set 4dp down from the row's top instead. -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/loading_catalog"
-        android:textSize="12sp"
-        android:lineSpacingExtra="2dp"
-        android:paddingBottom="6dp" />
+        android:orientation="horizontal"
+        android:baselineAligned="false"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="@string/loading_catalog"
+            android:textSize="12sp"
+            android:lineSpacingExtra="2dp" />
+
+        <!-- ON / OFF, the way Traffic's toggle reads: ATAK's own dark button with
+             the label in green for ON and red for OFF, so the state is a color
+             seen from across the panel and not only a word. -->
+        <Button
+            style="@style/TakwerxButton"
+            android:id="@+id/toggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="6dp"
+            android:layout_marginTop="4dp"
+            android:minWidth="64dp"
+            android:text="@string/toggle_off" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/legend"

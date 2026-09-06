@@ -100,6 +100,19 @@ public final class CamDepotPane implements CameraStore.Listener {
     private Button radiusFromButton;
     private Button radiusPresetButton;
     private final Button bearingsOffButton;
+    /**
+     * The pinned ON / OFF toggle at the top right of the pane, beside the status
+     * line. Outside the list, so it never scrolls out of view the way the header
+     * controls do.
+     *
+     * <p>ON draws the cameras the filters select; OFF takes every one of them off
+     * the map and leaves the pane alone -- the filters, the list and the bearing
+     * requests all stay, so ON puts back exactly what was there. It is the map's
+     * switch, not the pane's, the same as Traffic's ON / OFF for its overlay.
+     */
+    private final Button toggle;
+    /** Remembered across restarts, and on by default so nothing changes for anyone. */
+    private boolean toggleOn = true;
     private final EditText search;
     /**
      * Clears the search box, and is disabled while it is empty.
@@ -240,6 +253,7 @@ public final class CamDepotPane implements CameraStore.Listener {
         root = PluginLayoutInflater.inflate(pluginContext, R.layout.main_layout, null);
         status = root.findViewById(R.id.status);
         statusColor = status.getCurrentTextColor();
+        toggle = root.findViewById(R.id.toggle);
         list = root.findViewById(R.id.cameras);
         legend(root.findViewById(R.id.legend));
 
@@ -280,6 +294,10 @@ public final class CamDepotPane implements CameraStore.Listener {
         wire();
         updateFavoritesButton();
         updateBearingsOffButton();
+        updateToggleButton();
+        // Before any camera arrives, so a pane restored OFF never draws and then
+        // erases.
+        layer.setMapOn(toggleOn);
         // From the bar, not from zero. restoreUi() has already put the saved radius
         // on the slider; hard-coding 0 here set the VALUE back to off while leaving
         // the bar where it was, so the panel came back showing a slider at 11 miles
@@ -345,6 +363,18 @@ public final class CamDepotPane implements CameraStore.Listener {
     }
 
     private void wire() {
+        // Press for ON, press again for OFF. The button is the whole indicator.
+        toggle.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                toggleOn = !toggleOn;
+                updateToggleButton();
+                layer.setMapOn(toggleOn);
+                rememberUi();
+                updateStatus();
+            }
+        });
+
         // Tapping a stills camera on the map opens the same picture the panel shows.
         layer.setOnStillTapped(new CameraLayer.OnStillTapped() {
             @Override
@@ -705,6 +735,7 @@ public final class CamDepotPane implements CameraStore.Listener {
     // saved coordinate would restore a radius drawn around somewhere the operator
     // has since left.
     private static final String PREF_FROM_MAP = "camdepot_radius_from_map";
+    private static final String PREF_MAP_ON = "camdepot_map_on";
 
     /**
      * Starting points, expressed as what the scale bar would read — the same
@@ -791,6 +822,7 @@ public final class CamDepotPane implements CameraStore.Listener {
             stillOnly.setChecked(p.getBoolean(PREF_STILL, false));
             inView.setChecked(p.getBoolean(PREF_IN_VIEW, false));
             favoritesFirst = p.getBoolean(PREF_FAV_FIRST, false);
+            toggleOn = p.getBoolean(PREF_MAP_ON, true);
             final int savedRadius = p.getInt(PREF_RADIUS, 0);
             radius.setProgress(savedRadius);
             if (p.getBoolean(PREF_FROM_MAP, false))
@@ -807,6 +839,7 @@ public final class CamDepotPane implements CameraStore.Listener {
                 + "|" + joinCounties()
                 + "|" + fireOnly.isChecked() + liveOnly.isChecked()
                 + stillOnly.isChecked() + inView.isChecked() + favoritesFirst
+                + toggleOn
                 + "|" + radius.getProgress() + (center != null);
     }
 
@@ -838,6 +871,7 @@ public final class CamDepotPane implements CameraStore.Listener {
                     .putBoolean(PREF_STILL, stillOnly.isChecked())
                     .putBoolean(PREF_IN_VIEW, inView.isChecked())
                     .putBoolean(PREF_FAV_FIRST, favoritesFirst)
+                    .putBoolean(PREF_MAP_ON, toggleOn)
                     .putInt(PREF_RADIUS, radius.getProgress())
                     .putBoolean(PREF_FROM_MAP, center != null)
                     .apply();
@@ -917,6 +951,17 @@ public final class CamDepotPane implements CameraStore.Listener {
         bearingsOffButton.setText(n == 0 ? "No bearings shown"
                 : String.format(Locale.US, "Turn off %d bearing%s",
                         n, n == 1 ? "" : "s"));
+    }
+
+    /**
+     * ON in green, OFF in red, on ATAK's ordinary dark button. The same treatment
+     * as Traffic's on/off buttons, so the two plugins read the same way. What it
+     * does to the map is {@link CameraLayer#setMapOn}.
+     */
+    private void updateToggleButton() {
+        toggle.setText(toggleOn ? R.string.toggle_on : R.string.toggle_off);
+        toggle.setTextColor(pluginContext.getResources().getColor(
+                toggleOn ? R.color.state_on : R.color.state_off));
     }
 
     // ---- following the operator -------------------------------------------
@@ -1505,7 +1550,11 @@ public final class CamDepotPane implements CameraStore.Listener {
                         ", %,d not listed \u2014 offline, still loading, or not "
                                 + "matching the search", gone));
         }
-        if (!layer.isWithinZoom())
+        // OFF first: it overrides the zoom gate and the cap, and the count line
+        // above still reads "up and matching", which is true of the list.
+        if (!toggleOn)
+            msg.append("\nMap: off — press ON to draw the cameras");
+        else if (!layer.isWithinZoom())
             msg.append("\nMap: none drawn — zoom in past your threshold");
         else if (layer.getOmitted() > 0)
             msg.append(String.format(Locale.US,

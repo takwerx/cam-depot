@@ -1,12 +1,12 @@
 # Cam Depot for ATAK — User Guide
 
-**Version 1.1 · takwerx**
+**Version 1.2 · takwerx**
 
-**Download Cam Depot 1.1** (pick the one matching your ATAK-CIV version, sideload, then load it in ATAK's Plugins manager):
+**Download Cam Depot 1.2** (pick the one matching your ATAK-CIV version, sideload, then load it in ATAK's Plugins manager):
 
-- **ATAK-CIV 5.6:** https://github.com/takwerx/cam-depot/releases/download/v1.1/ATAK-Plugin-CamDepot-1.1--5.6.0-civ-release.apk
-- **ATAK-CIV 5.7:** https://github.com/takwerx/cam-depot/releases/download/v1.1/ATAK-Plugin-CamDepot-1.1--5.7.0-civ-release.apk
-- **ATAK-CIV 5.8:** https://github.com/takwerx/cam-depot/releases/download/v1.1/ATAK-Plugin-CamDepot-1.1--5.8.0-civ-release.apk
+- **ATAK-CIV 5.6:** https://github.com/takwerx/cam-depot/releases/download/v1.2/ATAK-Plugin-CamDepot-1.2--5.6.0-civ-release.apk
+- **ATAK-CIV 5.7:** https://github.com/takwerx/cam-depot/releases/download/v1.2/ATAK-Plugin-CamDepot-1.2--5.7.0-civ-release.apk
+- **ATAK-CIV 5.8:** https://github.com/takwerx/cam-depot/releases/download/v1.2/ATAK-Plugin-CamDepot-1.2--5.8.0-civ-release.apk
 
 All releases: https://github.com/takwerx/cam-depot/releases
 
@@ -55,6 +55,9 @@ whole catalog.
 - **Provider** — one agency within it.
 - **County** — as many counties as the job covers.
 - **On screen only** — just what is in the current map view.
+
+The **ON / OFF** button at the top right, above **Sync**, is the map's switch.
+It is covered under [Drawing on the map](#9-drawing-on-the-map).
 
 ### State and provider
 
@@ -303,6 +306,23 @@ And the panel always says what the map is doing:
 
 If more cameras match than can be drawn legibly, the panel says how many were left
 off and to zoom in. It will not quietly show you part of the picture.
+
+### On and off
+
+The **ON / OFF** button at the top right of the panel is the map's switch. It
+stays in view however far the panel is scrolled.
+
+![The map on](screenshots/28_map_on.png)
+
+**ON**, in green, draws the cameras the panel selects, which is how the plugin
+has always behaved. **OFF**, in red, takes every one of them off the map and
+changes nothing else: the filters, the list and any bearings you asked for stay
+as they are, so ON puts back exactly what was there.
+
+![The map off](screenshots/29_map_off.png)
+
+Use it to clear the map for a moment without losing the setup. The status line
+says "Map: off" while it is off, and the switch is remembered across restarts.
 
 ---
 

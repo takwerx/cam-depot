@@ -3,7 +3,7 @@
 
 #show: userguide.with(
    plugin-name: "Cam Depot",
-   plugin-version: "1.1",
+   plugin-version: "1.2",
    platform: "ATAK",
    platform-version: "5.8.0",
 )
@@ -52,6 +52,9 @@ the whole catalog.
   once.
 
   *On screen only* narrows the list to whatever is in the current map view.
+
+  *ON / OFF*, top right above *Sync*, is the map's switch. See _Drawing on
+  the map_.
 ]
 ]
 
@@ -415,6 +418,31 @@ only when you are zoomed in past a threshold you choose.
   If more cameras match than can be drawn legibly, the panel says how many were
   left off and to zoom in. It will not quietly show you part of the picture.
 ]
+]
+
+#tak-slide[
+== On and off
+
+#toolbox.side-by-side(columns: (6fr, 6fr))[
+  #image("23.png", width: 100%)
+
+  #v(4pt)
+  *ON*, in green, draws the cameras the panel selects. This is how the plugin
+  has always behaved, and it is where the switch starts.
+][
+  #image("23a.png", width: 100%)
+
+  #v(4pt)
+  *OFF*, in red, takes every one of them off the map and changes nothing else:
+  the filters, the list and any bearings you asked for stay as they are, so ON
+  puts back exactly what was there.
+]
+
+#v(6pt)
+The switch sits at the top right of the panel, above *Sync*, and stays in view
+however far the panel is scrolled. Use it to clear the map for a moment without
+losing the setup. The status line says "Map: off" while it is off, and the
+switch is remembered across restarts.
 ]
 
 #tak-slide[

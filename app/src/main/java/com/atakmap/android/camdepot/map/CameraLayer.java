@@ -14,6 +14,7 @@ import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.map.AtakMapView;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -228,6 +229,11 @@ public final class CameraLayer {
     private double maxResolution = 500;
     private double rangeMeters = DEFAULT_RANGE_M;
     private boolean gateEnabled = true;
+    /**
+     * The pane's ON / OFF toggle. Off means the map draws nothing, whatever the
+     * filters selected; {@link #selected} is kept, so ON puts the same cameras back.
+     */
+    private boolean mapOn = true;
 
     private final android.os.Handler main =
             new android.os.Handler(android.os.Looper.getMainLooper());
@@ -297,6 +303,28 @@ public final class CameraLayer {
         applyZoomGate();
     }
 
+    // ---- the pane's ON / OFF ----------------------------------------------
+
+    /**
+     * Take every camera off the map, or put the selection back.
+     *
+     * <p>Goes through {@link #drawVisible()} rather than a visibility flip, so OFF
+     * is the same path as every camera scrolling out of the viewport at once:
+     * markers and their bearing lines are removed in batches, video entries and
+     * bearing <em>requests</em> are kept, and ON redraws exactly as a pan back
+     * would. Nothing new to get wrong.
+     */
+    public void setMapOn(boolean on) {
+        if (mapOn == on)
+            return;
+        mapOn = on;
+        drawVisible();
+    }
+
+    public boolean isMapOn() {
+        return mapOn;
+    }
+
     /**
      * A hair of tolerance, and it is load bearing.
      *
@@ -356,7 +384,8 @@ public final class CameraLayer {
     public void drawVisible() {
         final GeoBounds view = padded(mapView.getBounds());
         final List<Camera> want = new ArrayList<>();
-        for (Camera c : selected) {
+        // OFF wants nothing on screen; apply() then removes whatever is there.
+        for (Camera c : mapOn ? selected : Collections.<Camera>emptyList()) {
             if (view == null || view.intersects(c.lat, c.lon, c.lat, c.lon))
                 want.add(c);
         }
