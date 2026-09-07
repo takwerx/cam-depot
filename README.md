@@ -1,10 +1,10 @@
 ATAK Plugin — Cam Depot
 
-**Download Cam Depot 1.2** (pick the one matching your ATAK-CIV version, sideload, then load it in ATAK's Plugins manager):
+**Download Cam Depot 1.3** (pick the one matching your ATAK-CIV version, sideload, then load it in ATAK's Plugins manager):
 
-- **ATAK-CIV 5.6:** https://github.com/takwerx/cam-depot/releases/download/v1.2/ATAK-Plugin-CamDepot-1.2--5.6.0-civ-release.apk
-- **ATAK-CIV 5.7:** https://github.com/takwerx/cam-depot/releases/download/v1.2/ATAK-Plugin-CamDepot-1.2--5.7.0-civ-release.apk
-- **ATAK-CIV 5.8:** https://github.com/takwerx/cam-depot/releases/download/v1.2/ATAK-Plugin-CamDepot-1.2--5.8.0-civ-release.apk
+- **ATAK-CIV 5.6:** https://github.com/takwerx/cam-depot/releases/download/v1.3/ATAK-Plugin-CamDepot-1.3--5.6.0-civ-release.apk
+- **ATAK-CIV 5.7:** https://github.com/takwerx/cam-depot/releases/download/v1.3/ATAK-Plugin-CamDepot-1.3--5.7.0-civ-release.apk
+- **ATAK-CIV 5.8:** https://github.com/takwerx/cam-depot/releases/download/v1.3/ATAK-Plugin-CamDepot-1.3--5.8.0-civ-release.apk
 
 All releases: https://github.com/takwerx/cam-depot/releases
 
@@ -59,7 +59,7 @@ source submission zip).
 _________________________________________________________________
 STATUS
 
-Release candidate. Version 1.2.
+Release candidate. Version 1.3.
 
 Exercised on hardware: Samsung Galaxy XCover Pro (ATAK-CIV 5.8.0.3). Panel,
 filters, favorites, camera imagery, live video, bearing lines and the zoom
