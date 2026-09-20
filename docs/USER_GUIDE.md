@@ -1,6 +1,6 @@
 # Cam Depot for ATAK — User Guide
 
-**Version 1.3 · takwerx**
+**Version 1.4 · takwerx**
 
 **Download Cam Depot 1.4** (pick the one matching your ATAK-CIV version, sideload, then load it in ATAK's Plugins manager):
 
