@@ -14,8 +14,8 @@ All releases: https://github.com/takwerx/cam-depot/releases
 _________________________________________________________________
 PURPOSE AND CAPABILITIES
 
-Public traffic and wildfire cameras on the ATAK map. About 38,000 of them across
-54 states and provinces, from state departments of transportation, the FAA, and
+Public traffic and wildfire cameras on the ATAK map. About 39,000 of them across
+55 states and provinces, from state departments of transportation, the FAA, and
 the wildfire lookout networks, browsed from a side panel and drawn on the map.
 
 Answers "what does it look like there right now" without leaving ATAK. An
@@ -25,7 +25,7 @@ ATAK's own player.
 
 Capabilities:
 
-  - About 38,000 cameras, refreshed from the publishing agencies, with roughly
+  - About 39,000 cameras, refreshed from the publishing agencies, with roughly
     9,000 carrying a playable video stream.
   - Filter by state, provider, county, distance from your position or from a
     point on the map, and by whether a camera streams, is a still, or belongs to
