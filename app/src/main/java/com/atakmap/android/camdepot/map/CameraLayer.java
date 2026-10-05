@@ -667,7 +667,7 @@ public final class CameraLayer {
             // waits for the whole add queue -- about 13 s for Texas's 2,050
             // streams -- so a radial video tap in that window named an entry
             // ATAK did not hold and got "invalid video information". Without
-            // videoUID the radial greys its video button instead
+            // videoUID the radial grays its video button instead
             // (menus/b-m-p-s-p-loc.xml: disabled='!{${videoUID}}').
             pendingEntries.put(c.id, ce);
             videoUids.put(c.id, ce.getUID());
