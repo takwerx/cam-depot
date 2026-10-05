@@ -386,13 +386,48 @@ public final class CameraLayer {
         final List<Camera> want = new ArrayList<>();
         // OFF wants nothing on screen; apply() then removes whatever is there.
         for (Camera c : mapOn ? selected : Collections.<Camera>emptyList()) {
-            if (view == null || view.intersects(c.lat, c.lon, c.lat, c.lon))
+            if (view == null || view.intersects(c.lat, c.lon, c.lat, c.lon)
+                    || lineInView(c, view))
                 want.add(c);
         }
         omitted = Math.max(0, want.size() - MAX_MARKERS);
         final List<Camera> draw = want.size() > MAX_MARKERS
                 ? new ArrayList<>(want.subList(0, MAX_MARKERS)) : want;
         apply(draw);
+    }
+
+    /**
+     * True when this camera's bearing is on and its line crosses {@code view}.
+     *
+     * <p>The line belongs to the marker -- ATAK drops the SensorFOV when the marker
+     * leaves the group -- so culling by the camera's own position took the line
+     * with it. A 60 km line runs far past the screen, and zooming in on what the
+     * camera is looking at pushes the camera itself out of view: the marker was
+     * removed and the line vanished exactly where the operator was looking.
+     *
+     * <p>The test is the line's bounding box (a stills camera's wedge: both
+     * edges), which can keep a camera whose line passes just outside a corner.
+     * That costs one marker; only cameras with a bearing switched on are ever
+     * tested, and there are a handful at most.
+     */
+    private boolean lineInView(Camera c, GeoBounds view) {
+        if (!requested.contains(c.id) || !c.hasFov())
+            return false;
+        final boolean still = !c.hasStream();
+        final double length = still ? STILL_FOV_RANGE_M
+                : Math.min(rangeMeters, SensorDetailHandler.MAX_SENSOR_RANGE);
+        final double half = still ? STILL_FOV_DEGREES / 2 : 0;
+        final GeoPoint origin = new GeoPoint(c.lat, c.lon);
+        double north = c.lat, south = c.lat, west = c.lon, east = c.lon;
+        for (double az : new double[] { c.pan - half, c.pan + half }) {
+            final GeoPoint end = com.atakmap.coremap.maps.coords.GeoCalculations
+                    .pointAtDistance(origin, az, length);
+            north = Math.max(north, end.getLatitude());
+            south = Math.min(south, end.getLatitude());
+            west = Math.min(west, end.getLongitude());
+            east = Math.max(east, end.getLongitude());
+        }
+        return view.intersects(north, west, south, east);
     }
 
     /** How many on-screen cameras the cap left out last pass. */
