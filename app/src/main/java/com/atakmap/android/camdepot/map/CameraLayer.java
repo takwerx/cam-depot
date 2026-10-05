@@ -159,9 +159,13 @@ public final class CameraLayer {
      * video list, and pointless work on the UI thread each time.
      */
     private final Map<String, String> videoUids = new HashMap<>();
-    /** Video entries built this pass, registered in one batch by {@link #addTick}. */
-    private final List<gov.tak.api.video.ConnectionEntry> pendingEntries =
-            new ArrayList<>();
+    /**
+     * Camera id -> video entry built this pass, registered in one batch by
+     * {@link #addTick}. Keyed by camera so a marker rebuilt before the flush
+     * replaces its own entry rather than queueing a second one.
+     */
+    private final Map<String, gov.tak.api.video.ConnectionEntry> pendingEntries =
+            new java.util.LinkedHashMap<>();
     private final Map<String, Camera> shown = new HashMap<>();
     /** Cameras waiting for a marker; drained by {@link #addTick}. */
     private final List<Camera> pending = new ArrayList<>();
@@ -657,9 +661,16 @@ public final class CameraLayer {
             if (ce == null)
                 return;
             // Queued, not registered here. See flushVideoEntries().
-            pendingEntries.add(ce);
+            //
+            // videoUID is NOT set yet: flushVideoEntries sets it once the
+            // VideoManager holds the entry. It used to be set here, and the flush
+            // waits for the whole add queue -- about 13 s for Texas's 2,050
+            // streams -- so a radial video tap in that window named an entry
+            // ATAK did not hold and got "invalid video information". Without
+            // videoUID the radial greys its video button instead
+            // (menus/b-m-p-s-p-loc.xml: disabled='!{${videoUID}}').
+            pendingEntries.put(c.id, ce);
             videoUids.put(c.id, ce.getUID());
-            m.setMetaString("videoUID", ce.getUID());
             m.setMetaString("videoUrl", c.stream);
         } catch (LinkageError | RuntimeException e) {
             // Video is a bonus; a plugin must not fail to draw a camera over it.
@@ -833,13 +844,23 @@ public final class CameraLayer {
     private void flushVideoEntries() {
         if (pendingEntries.isEmpty())
             return;
+        final List<String> ids = new ArrayList<>(pendingEntries.keySet());
         final List<gov.tak.api.video.ConnectionEntry> batch =
-                new ArrayList<>(pendingEntries);
+                new ArrayList<>(pendingEntries.values());
         pendingEntries.clear();
         try {
             com.atakmap.android.video.manager.VideoManager.getInstance()
                     .addConnectionEntries(batch, false);
             Log.d(TAG, "registered " + batch.size() + " video entries (no persist)");
+            // Only now does each marker's video button point at something.
+            // videoUids, not the batch: the pane's Live video may have registered
+            // a newer entry for the same camera meanwhile.
+            for (String id : ids) {
+                final Marker m = markers.get(id);
+                final String uid = videoUids.get(id);
+                if (m != null && uid != null)
+                    m.setMetaString("videoUID", uid);
+            }
         } catch (LinkageError | RuntimeException e) {
             // Video is a bonus; a plugin must not fail to draw a camera over it.
             Log.w(TAG, "could not register video entries", e);
