@@ -1,5 +1,7 @@
 package com.atakmap.android.camdepot.data;
 
+import android.content.Context;
+
 import com.atakmap.android.camdepot.model.Camera;
 import com.atakmap.android.camdepot.model.Catalog;
 import com.atakmap.android.camdepot.net.Http;
@@ -9,6 +11,9 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,6 +49,7 @@ public final class CameraStore {
         void onError(String message);
     }
 
+    private final Context context;
     private final String baseUrl;
     private final Listener listener;
 
@@ -76,11 +82,66 @@ public final class CameraStore {
     /** Last change sequence seen from the live feed, per state. */
     private final Map<String, Integer> seq = new java.util.concurrent.ConcurrentHashMap<>();
 
-    public CameraStore(String baseUrl, Listener listener) {
+    public CameraStore(Context context, String baseUrl, Listener listener) {
+        this.context = context;
         // One trailing slash, however the preference was typed.
         this.baseUrl = baseUrl.endsWith("/")
                 ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.listener = listener;
+    }
+
+    public CameraStore(String baseUrl, Listener listener) {
+        this(null, baseUrl, listener);
+    }
+
+    private String readAsset(String path) {
+        if (context == null)
+            return null;
+        InputStream is = null;
+        try {
+            is = context.getAssets().open(path);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) != -1) {
+                baos.write(buf, 0, n);
+            }
+            return baos.toString("UTF-8");
+        } catch (IOException e) {
+            return null;
+        } finally {
+            if (is != null) {
+                try {
+                    is.close();
+                } catch (IOException ignored) {}
+            }
+        }
+    }
+
+    private void mergeBundledCatalog(Catalog c) {
+        if (c == null)
+            return;
+        String raw = readAsset("feeds/catalog.json");
+        if (raw != null) {
+            try {
+                JSONObject overlay = new JSONObject(raw);
+                c.mergeOverlay(overlay);
+            } catch (JSONException e) {
+                Log.w(TAG, "could not parse bundled catalog overlay", e);
+            }
+        }
+    }
+
+    private void loadBundledState(String state) {
+        String raw = readAsset("feeds/" + state + ".json");
+        if (raw != null) {
+            try {
+                parseStatic(state, raw);
+                Log.d(TAG, "loaded bundled cameras for " + state);
+            } catch (JSONException e) {
+                Log.w(TAG, "failed parsing bundled cameras for " + state, e);
+            }
+        }
     }
 
     /**
@@ -145,8 +206,11 @@ public final class CameraStore {
         }
         final List<String> todo = new ArrayList<>();
         for (Catalog.State s : catalog.states) {
-            if (!byState.containsKey(s.code))
-                todo.add(s.code);
+            if (!byState.containsKey(s.code)) {
+                loadBundledState(s.code);
+                if (!byState.containsKey(s.code))
+                    todo.add(s.code);
+            }
         }
         if (todo.isEmpty()) {
             if (done != null)
@@ -257,19 +321,36 @@ public final class CameraStore {
                                 + " is newer than this plugin understands");
                         return;
                     }
+                    mergeBundledCatalog(c);
                     catalog = c;
                     listener.onCatalog(c);
                 } catch (JSONException | UnsupportedEncodingException e) {
                     Log.w(TAG, "catalog parse failed", e);
-                    listener.onError("catalog was not readable");
+                    fallbackBundledCatalog("catalog was not readable");
                 }
             }
 
             @Override
             public void onFailure(String error) {
-                listener.onError("catalog: " + error);
+                fallbackBundledCatalog(error);
             }
         });
+    }
+
+    private void fallbackBundledCatalog(String remoteError) {
+        final String raw = readAsset("feeds/catalog.json");
+        if (raw != null) {
+            try {
+                final Catalog c = new Catalog(new JSONObject(raw));
+                catalog = c;
+                Log.i(TAG, "remote catalog unavailable (" + remoteError + "); using bundled catalog");
+                listener.onCatalog(c);
+                return;
+            } catch (JSONException e) {
+                Log.w(TAG, "bundled catalog parse failed", e);
+            }
+        }
+        listener.onError("catalog: " + remoteError);
     }
 
     /**
@@ -298,6 +379,13 @@ public final class CameraStore {
             refreshState(state);
             return;
         }
+
+        // Preload bundled state cameras first (e.g. ALDOT, BCWI, TDOT)
+        loadBundledState(state);
+        if (byState.containsKey(state)) {
+            deliver(state);
+        }
+
         Http.get(baseUrl + "/static/" + state + ".json.gz" + bust(), new Http.Callback() {
             @Override
             public void onSuccess(byte[] body) {
@@ -314,7 +402,7 @@ public final class CameraStore {
                         MAIN.post(new Runnable() {
                             @Override
                             public void run() {
-                                if (count < 0) {
+                                if (count < 0 && !byState.containsKey(state)) {
                                     listener.onError(state
                                             + ": camera list was not readable");
                                     return;
@@ -332,7 +420,11 @@ public final class CameraStore {
 
             @Override
             public void onFailure(String error) {
-                listener.onError(state + ": " + error);
+                if (byState.containsKey(state)) {
+                    Log.w(TAG, "remote static load failed for " + state + " (" + error + "); using bundled cameras");
+                } else {
+                    listener.onError(state + ": " + error);
+                }
             }
         });
     }
@@ -346,7 +438,10 @@ public final class CameraStore {
 
     private int parseStatic(String state, String json) throws JSONException {
         final JSONArray a = new JSONArray(json);
-        final Map<String, Camera> m = new LinkedHashMap<>(a.length() * 2);
+        Map<String, Camera> m = byState.get(state);
+        if (m == null) {
+            m = new LinkedHashMap<>(a.length() * 2);
+        }
         for (int i = 0; i < a.length(); i++) {
             final JSONObject o = a.getJSONObject(i);
             final String id = o.optString("id");

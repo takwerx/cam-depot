@@ -417,7 +417,7 @@ public final class CamDepotPane implements CameraStore.Listener {
         this.pluginContext = pluginContext;
         this.mapView = mapView;
         this.layer = new CameraLayer(mapView, pluginContext);
-        this.store = new CameraStore(baseUrl, this);
+        this.store = new CameraStore(pluginContext, baseUrl, this);
         // MapView context: these have to survive the plugin being reloaded.
         this.favorites = new Favorites(mapView.getContext());
 

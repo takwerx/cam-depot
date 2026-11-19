@@ -59,6 +59,20 @@ source submission zip).
 _________________________________________________________________
 STATUS
 
+Alabama & Tennessee Feeds Update:
+- Alabama DOT (ALDOT / ALGO Traffic): Integrated 646 live traffic cameras statewide
+  (Birmingham, Mobile, Montgomery, Huntsville, Tuscaloosa, and interstate corridors)
+  carrying live HLS video streams and snapshot images.
+- Baron Critical Weather Institute (BCWI): Integrated Alabama WeatherNet observation
+  cameras across Huntsville Utilities, Alabama Power, and County EMA facilities.
+- Tennessee DOT (TDOT SmartWay): Full coverage of 674 cameras across Nashville,
+  Knoxville, Memphis, and Chattanooga with live HLS video streaming.
+- Bundled Offline Fallback: State feeds and catalog metadata are bundled directly
+  under `app/src/main/assets/feeds/` so cameras load immediately even in disconnected
+  or low-bandwidth environments.
+- Feed Updater Tool: `tools/update_feeds.py` harvests feeds directly from ALGO Traffic
+  and TDOT APIs and generates both bundled assets and exportable `.json.gz` shards.
+
 Version 1.9: a cleaner pane, and Texas cameras that play on the first tap.
 
 - Opening a Texas camera now wakes its stream in the background, so Live video

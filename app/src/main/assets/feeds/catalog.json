@@ -1,0 +1,131 @@
+{
+  "format": 1,
+  "generated": "2026-11-19T15:43:58Z",
+  "source": "Cam Depot Feeds (ALDOT, TDOT, Baron Critical Weather Institute, FAA)",
+  "counts": {
+    "cameras": 1399,
+    "fire": 0,
+    "offline": 0,
+    "streams": 676
+  },
+  "states": [
+    {
+      "st": "AL",
+      "cameras": 725,
+      "fire": 0,
+      "counties": [
+        "Autauga",
+        "Baldwin",
+        "Bibb",
+        "Calhoun",
+        "Chilton",
+        "Cleburne",
+        "Colbert",
+        "Cullman",
+        "Elmore",
+        "Fayette",
+        "Greene",
+        "Hale",
+        "Houston",
+        "Jefferson",
+        "Lamar",
+        "Lauderdale",
+        "Lee",
+        "Limestone",
+        "Lowndes",
+        "Macon",
+        "Madison",
+        "Marion",
+        "Marshall",
+        "Mobile",
+        "Montgomery",
+        "Morgan",
+        "Perry",
+        "Pickens",
+        "Pike",
+        "Russell",
+        "Shelby",
+        "Sumter",
+        "Talladega",
+        "Tuscaloosa",
+        "Walker",
+        "Winston"
+      ]
+    },
+    {
+      "st": "TN",
+      "cameras": 674,
+      "fire": 0,
+      "counties": [
+        "Blount",
+        "Bradley",
+        "Cheatham",
+        "Cocke",
+        "Coffee",
+        "Cumberland",
+        "Davidson",
+        "Dickson",
+        "Fayette",
+        "Grundy",
+        "Hamilton",
+        "Haywood",
+        "Hickman",
+        "Humphreys",
+        "Jefferson",
+        "Knox",
+        "Loudon",
+        "Madison",
+        "Marion",
+        "Marshall",
+        "McMinn",
+        "Montgomery",
+        "Polk",
+        "Roane",
+        "Robertson",
+        "Rutherford",
+        "Sevier",
+        "Shelby",
+        "Sullivan",
+        "Sumner",
+        "Unicoi",
+        "Washington",
+        "Williamson",
+        "Wilson"
+      ]
+    }
+  ],
+  "providers": [
+    {
+      "id": "ALDOT",
+      "cameras": 648,
+      "fire": 0,
+      "states": [
+        "AL"
+      ]
+    },
+    {
+      "id": "BCWI",
+      "cameras": 61,
+      "fire": 0,
+      "states": [
+        "AL"
+      ]
+    },
+    {
+      "id": "FAA",
+      "cameras": 16,
+      "fire": 0,
+      "states": [
+        "AL"
+      ]
+    },
+    {
+      "id": "TDOT",
+      "cameras": 674,
+      "fire": 0,
+      "states": [
+        "TN"
+      ]
+    }
+  ]
+}

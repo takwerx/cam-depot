@@ -8,8 +8,27 @@
 
 buildscript {
 
+    def getValueFromPropertiesFile = { propFile, key ->
+        if(!propFile.isFile() || !propFile.canRead())
+            return null
+        def prop = new Properties()
+        def reader = propFile.newReader()
+        try {
+            prop.load(reader)
+        } finally {
+            reader.close()
+        }
+        return prop.get(key)
+    }
+
+    def getProperty = { name, defValue ->
+        def prop = project.properties[name] ?:
+                getValueFromPropertiesFile(project.rootProject.file('local.properties'), name)
+        return (null == prop) ? defValue : prop
+    }
+
     ext.PLUGIN_VERSION = "1.9"
-    ext.ATAK_VERSION = '5.8.0'
+    ext.ATAK_VERSION = getProperty('atak.version', '5.6.0')
     // Android's integer version. The package manager and every MDM decide "is
     // this an update" from this number alone; versionName is display only. The
     // SDK's getVersionCode() reads the git commit and tak.gov builds from a zip
@@ -34,25 +53,6 @@ buildscript {
     }()
 
     def takdevVersion = '3.+'
-
-    def getValueFromPropertiesFile = { propFile, key ->
-        if(!propFile.isFile() || !propFile.canRead())
-            return null
-        def prop = new Properties()
-        def reader = propFile.newReader()
-        try {
-            prop.load(reader)
-        } finally {
-            reader.close()
-        }
-        return prop.get(key)
-    }
-
-    def getProperty = { name, defValue ->
-        def prop = project.properties[name] ?:
-                getValueFromPropertiesFile(project.rootProject.file('local.properties'), name)
-        return (null == prop) ? defValue : prop
-    }
 
     def urlKey = 'takrepo.url'
 
