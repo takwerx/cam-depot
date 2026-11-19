@@ -107,4 +107,63 @@ public final class Catalog {
         }
         return null;
     }
+
+    /**
+     * Merge additional bundled state, county, and provider records into this catalog.
+     */
+    public void mergeOverlay(JSONObject o) {
+        if (o == null) return;
+        final JSONArray st = o.optJSONArray("states");
+        for (int i = 0; st != null && i < st.length(); i++) {
+            final JSONObject s = st.optJSONObject(i);
+            if (s == null) continue;
+            final String code = s.optString("st");
+            final int cams = s.optInt("cameras", 0);
+            final int fire = s.optInt("fire", 0);
+            final List<String> counties = new ArrayList<>();
+            final JSONArray ca = s.optJSONArray("counties");
+            for (int j = 0; ca != null && j < ca.length(); j++) {
+                counties.add(ca.optString(j));
+            }
+            State existing = state(code);
+            if (existing != null) {
+                for (String co : counties) {
+                    if (!existing.counties.contains(co)) {
+                        existing.counties.add(co);
+                    }
+                }
+                if (cams > existing.cameras) {
+                    int idx = states.indexOf(existing);
+                    if (idx >= 0) {
+                        states.set(idx, new State(code, cams, fire, existing.counties));
+                    }
+                }
+            } else {
+                states.add(new State(code, cams, fire, counties));
+            }
+        }
+
+        final JSONArray pr = o.optJSONArray("providers");
+        for (int i = 0; pr != null && i < pr.length(); i++) {
+            final JSONObject p = pr.optJSONObject(i);
+            if (p == null) continue;
+            final String id = p.optString("id");
+            final int cams = p.optInt("cameras", 0);
+            final boolean fire = p.optInt("fire") == 1;
+            boolean found = false;
+            for (int j = 0; j < providers.size(); j++) {
+                Provider existing = providers.get(j);
+                if (existing.id.equalsIgnoreCase(id)) {
+                    found = true;
+                    if (cams > existing.cameras) {
+                        providers.set(j, new Provider(id, cams, fire));
+                    }
+                    break;
+                }
+            }
+            if (!found) {
+                providers.add(new Provider(id, cams, fire));
+            }
+        }
+    }
 }
